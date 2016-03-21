@@ -7,7 +7,7 @@
  ***********/
 var matrixresort = matrixresort || {};
 
-matrixresort.pong = (function() {
+matrixresort.pong = (function($) {
     var gui, controls,
     _gameCanvasElementID,
     _scene,
@@ -20,14 +20,20 @@ matrixresort.pong = (function() {
         "fieldWidth": 384, 
         "fieldLength": 512, 
         "fieldColor": new THREE.Color("gray"), 
-        "cameraPosition": {"x": 0, "y": 300, "z": -600},
-        "ballColor": new THREE.Color("white"),
+        "cameraPosition": {"x": 0, "y": 300, "z": 600},
+        "ballColor": new THREE.Color("#ADFF2F"),
         "ballRadius": 8,
         "paddleWidth": 64,
-        "paddleColor": new THREE.Color("blue")
+        "paddleColor": new THREE.Color("blue"),
+        "wallWidth": 4,
+        "wallHeight": 64,
+        "wallColor": new THREE.Color("red")
     },
     _planeMesh,
     _ballMesh,
+    _humanPaddleMesh,
+    _computerPaddleMesh,
+    _keysPressed = {left: false, right: false},
 
     fnInit = function(gameCanvasElementID, gameOptions) {
         _gameCanvasElementID = gameCanvasElementID;
@@ -59,6 +65,8 @@ matrixresort.pong = (function() {
 
         _fnRender();
 
+        _setKeyboard();
+
         _fnAnimate();        
     },
 
@@ -73,6 +81,8 @@ matrixresort.pong = (function() {
 
     _fnCreateScene = function() {
         _fnCreatePlane();
+
+        _fnCreateWalls();
 
         _fnCreateBall();
 
@@ -102,6 +112,20 @@ matrixresort.pong = (function() {
         _scene.add(_planeMesh);     
     },
 
+    _fnCreateWalls = function() {
+        var wallGeometry = new THREE.BoxGeometry(_gameOptions.wallWidth, _gameOptions.wallHeight, _gameOptions.fieldLength);    
+        var wallMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: _gameOptions.wallColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+
+        var rightWallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+        var leftWallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+
+        leftWallMesh.position.set(-(_gameOptions.fieldWidth - _gameOptions.wallWidth)/2, _gameOptions.wallHeight/2, 0);
+        rightWallMesh.position.set((_gameOptions.fieldWidth - _gameOptions.wallWidth)/2,  _gameOptions.wallHeight/2, 0);
+
+        _scene.add(rightWallMesh);  
+        _scene.add(leftWallMesh);    
+    },
+
     _fnCreateBall = function() {
         var ballGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
         var ballMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
@@ -116,24 +140,82 @@ matrixresort.pong = (function() {
     },
 
     _fnCreatePaddles = function() {
-        var paddleHeight = 32, paddleWidth = 8;
-        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, 8);  
+        var paddleHeight = 32, paddleThickness = 8;
+        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, paddleThickness);  
         var paddleMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        _paddleMesh1 = new THREE.Mesh(paddleGeometry, paddleMaterial);
-        _paddleMesh2 = new THREE.Mesh(paddleGeometry, paddleMaterial);
+        _humanPaddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
+        _computerPaddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
 
-        _scene.add(_paddleMesh1);
-        _scene.add(_paddleMesh2);  
+        _scene.add(_humanPaddleMesh);
+        _scene.add(_computerPaddleMesh);  
 
-        _paddleMesh1.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - paddleWidth)/2);
-        _paddleMesh2.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - paddleWidth)/2);        
-    },    
+        _humanPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - paddleThickness)/2);
+        _computerPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - paddleThickness)/2);        
+    },  
+
+    _fnHumanPaddleMove = function() {
+        if(_keysPressed.left && _humanPaddleMesh.position.x > -(_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2) {
+            _humanPaddleMesh.position.x -= 4;
+        } else if(_keysPressed.right  && _humanPaddleMesh.position.x < (_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2) {     
+           _humanPaddleMesh.position.x += 4;         
+        }
+    }, 
+
+    _setDirection = function() {
+
+    },
+
+    _setKeyboard = function() {
+        $(document).keydown(function (e) {
+                var preventEventPropogation = true;
+
+                switch(e.keyCode) {
+                case 37:
+                    _keysPressed.left = true;
+                    break;
+                case 39:
+                    _keysPressed.right = true;
+                    break;
+                default:
+                    preventEventPropogation = false;
+
+                if(preventEventPropogation) {
+                    e.preventDefault();
+                } else {
+                    return;
+                }
+            }
+        });
+
+      $(document).keyup(function (e) {
+                var preventEventPropogation = true;
+
+                switch(e.keyCode) {
+                case 37:
+                    _keysPressed.left = false;
+                    break;
+                case 39:
+                    _keysPressed.right = false;
+                    break;
+                default:
+                    preventEventPropogation = false;
+
+                if(preventEventPropogation) {
+                    e.preventDefault();
+                } else {
+                    return;
+                }
+            }
+        });      
+    },
 
     _fnRender = function() {
         var delta = _clock.getDelta();
         _cameraControls.update(delta);
         _renderer.render(_scene, _camera);
+
+        _fnHumanPaddleMove();
     },
 
 
@@ -146,7 +228,7 @@ matrixresort.pong = (function() {
         init: fnInit
     };       
 
-})();
+})(jQuery);
 
 matrixresort.pong.init('container', {});
 
