@@ -17,14 +17,15 @@ matrixresort.pong = (function() {
     _clock,
     _gameOptions = {},
     _defaultGameOptions = {
-        "fieldWidth": 512, 
-        "fieldHeight": 384, 
+        "fieldWidth": 384, 
+        "fieldLength": 512, 
         "fieldColor": new THREE.Color("gray"), 
-        "cameraPosition": {"x": 0, "y": 0, "z": 600},
+        "cameraPosition": {"x": 0, "y": 300, "z": -600},
         "ballColor": new THREE.Color("white"),
         "ballRadius": 8
     },
     _planeMesh,
+    _ballMesh,
 
     fnInit = function(gameCanvasElementID, gameOptions) {
         _gameCanvasElementID = gameCanvasElementID;
@@ -71,6 +72,8 @@ matrixresort.pong = (function() {
     _fnCreateScene = function() {
         _fnCreatePlane();
 
+        _fnCreateBall();
+
         // randomBoxes(100, 5, 20, 5, 60);
 
         var light1 = new THREE.PointLight(0xFFFFFF, 1, 1000 );
@@ -87,7 +90,7 @@ matrixresort.pong = (function() {
     },
 
     _fnCreatePlane = function() {
-        var planeGeometry = new THREE.BoxGeometry(_gameOptions.fieldWidth, _gameOptions.fieldHeight, 0.1);    
+        var planeGeometry = new THREE.BoxGeometry(_gameOptions.fieldWidth, 0.1, _gameOptions.fieldLength);    
         var planeMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: _gameOptions.fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
         _planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
@@ -96,8 +99,20 @@ matrixresort.pong = (function() {
     },
 
     _fnCreateBall = function() {
+        var ballGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
+        var ballMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
+        _ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+        _scene.add(_ballMesh);
     },
+
+    _fnCreatePaddle = function() {
+        var paddleGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
+        var paddleMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+
+        _paddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
+        _scene.add(_paddleMesh);
+    },    
 
     _fnRender = function() {
         var delta = _clock.getDelta();
