@@ -22,7 +22,9 @@ matrixresort.pong = (function() {
         "fieldColor": new THREE.Color("gray"), 
         "cameraPosition": {"x": 0, "y": 300, "z": -600},
         "ballColor": new THREE.Color("white"),
-        "ballRadius": 8
+        "ballRadius": 8,
+        "paddleWidth": 64,
+        "paddleColor": new THREE.Color("blue")
     },
     _planeMesh,
     _ballMesh,
@@ -74,6 +76,8 @@ matrixresort.pong = (function() {
 
         _fnCreateBall();
 
+        _fnCreatePaddles();
+
         // randomBoxes(100, 5, 20, 5, 60);
 
         var light1 = new THREE.PointLight(0xFFFFFF, 1, 1000 );
@@ -103,15 +107,27 @@ matrixresort.pong = (function() {
         var ballMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
         _ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+
         _scene.add(_ballMesh);
+
+        _ballMesh.position.x = 0;
+        _ballMesh.position.y = _gameOptions.ballRadius;
+        _ballMesh.position.z = 0;
     },
 
-    _fnCreatePaddle = function() {
-        var paddleGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
-        var paddleMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+    _fnCreatePaddles = function() {
+        var paddleHeight = 32, paddleWidth = 8;
+        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, 8);  
+        var paddleMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        _paddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
-        _scene.add(_paddleMesh);
+        _paddleMesh1 = new THREE.Mesh(paddleGeometry, paddleMaterial);
+        _paddleMesh2 = new THREE.Mesh(paddleGeometry, paddleMaterial);
+
+        _scene.add(_paddleMesh1);
+        _scene.add(_paddleMesh2);  
+
+        _paddleMesh1.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - paddleWidth)/2);
+        _paddleMesh2.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - paddleWidth)/2);        
     },    
 
     _fnRender = function() {
