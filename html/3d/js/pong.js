@@ -29,7 +29,8 @@ matrixresort.pong = (function($) {
         "wallWidth": 4,
         "wallHeight": 64,
         "wallColor": new THREE.Color("red"),
-        "ballSpeed": 4
+        "ballSpeed": 4,
+        "pauseAfterScoreChange": 5
     },
     _planeMesh,
     _ballMesh,
@@ -37,6 +38,7 @@ matrixresort.pong = (function($) {
     _computerPaddleMesh,
     _keysPressed = {left: false, right: false},
     _ballSpeedComponents = null,
+    _deltaSinceLastScoreChange = -1,
 
     fnInit = function(gameCanvasElementID, gameOptions) {
         _gameCanvasElementID = gameCanvasElementID;
@@ -165,7 +167,7 @@ matrixresort.pong = (function($) {
         }
     }, 
 
-    _fnBallMove = function() {
+    _fnBallMove = function(delta) {
         if(!_ballSpeedComponents) {
             _fnCalculateBallSpeedComponents(1);
         }
@@ -184,6 +186,7 @@ matrixresort.pong = (function($) {
             if(_fnIsBallIntercepted(paddleToInterceptBall)) {
                 _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;      
             } else {
+                _deltaSinceLastScoreChange = 0;
                 // handle score
                 _fnResetGame();  
 
@@ -193,6 +196,16 @@ matrixresort.pong = (function($) {
 
         _ballMesh.position.x += _ballSpeedComponents.speedX;
         _ballMesh.position.z += _ballSpeedComponents.speedZ;        
+    },
+
+    _fnBallJump = function() {
+        var maxHeight = 32;
+        var unscaledHeight = Math.abs(Math.sin(2 * _deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
+        var hue = unscaledHeight;
+
+        _ballMesh.position.y = maxHeight * unscaledHeight + _gameOptions.ballRadius;
+        var currentHSL = _ballMesh.material.color.getHSL();
+        _ballMesh.material.color.setHSL(hue, currentHSL.s, currentHSL.l);
     },
 
     _fnResetGame = function() {
@@ -280,8 +293,18 @@ matrixresort.pong = (function($) {
         _cameraControls.update(delta);
         _renderer.render(_scene, _camera);
 
-        _fnHumanPaddleMove();
-        _fnBallMove();
+        if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+            if(_deltaSinceLastScoreChange > 0) {
+                _deltaSinceLastScoreChange = -1;
+                _ballMesh.position.y = _gameOptions.ballRadius;
+                _ballMesh.material.color.set(_gameOptions.ballColor);
+            }
+            _fnHumanPaddleMove();
+            _fnBallMove(delta);
+        } else {
+            _deltaSinceLastScoreChange += delta;               
+            _fnBallJump();         
+        }
     },
 
     _fnAnimate = function() {
