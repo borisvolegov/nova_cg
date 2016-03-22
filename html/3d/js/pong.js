@@ -24,18 +24,18 @@ matrixresort.pong = (function($) {
         "ballColor": new THREE.Color("#ADFF2F"),
         "ballRadius": 8,
         "paddleWidth": 64,
+        "paddleThickness": 8,
         "paddleColor": new THREE.Color("blue"),
         "wallWidth": 4,
         "wallHeight": 64,
         "wallColor": new THREE.Color("red"),
-        "ballSpeed": 3
+        "ballSpeed": 4
     },
     _planeMesh,
     _ballMesh,
     _humanPaddleMesh,
     _computerPaddleMesh,
     _keysPressed = {left: false, right: false},
-    _directionTangent = 1,
     _ballSpeedComponents = null,
 
     fnInit = function(gameCanvasElementID, gameOptions) {
@@ -143,8 +143,8 @@ matrixresort.pong = (function($) {
     },
 
     _fnCreatePaddles = function() {
-        var paddleHeight = 32, paddleThickness = 8;
-        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, paddleThickness);  
+        var paddleHeight = 32;
+        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, _gameOptions.paddleThickness);  
         var paddleMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
         _humanPaddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
@@ -153,8 +153,8 @@ matrixresort.pong = (function($) {
         _scene.add(_humanPaddleMesh);
         _scene.add(_computerPaddleMesh);  
 
-        _humanPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - paddleThickness)/2);
-        _computerPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - paddleThickness)/2);        
+        _humanPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);
+        _computerPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);        
     },  
 
     _fnHumanPaddleMove = function() {
@@ -167,21 +167,68 @@ matrixresort.pong = (function($) {
 
     _fnBallMove = function() {
         if(!_ballSpeedComponents) {
-            _fnCalculateBallSpeedComponents();
+            _fnCalculateBallSpeedComponents(1);
         }
+
+        if(_ballMesh.position.x >= _gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius) {
+            _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;          
+        }
+
+        if(_ballMesh.position.x <= -(_gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius)) {
+            _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;                
+        }   
+
+        var paddleToInterceptBall = _fnPaddleToInterceptBall();
+
+        if(paddleToInterceptBall != null) {
+            if(_fnIsBallIntercepted(paddleToInterceptBall)) {
+                _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;      
+            } else {
+                // handle score
+                _fnResetGame();  
+
+                return;
+            }
+        }   
 
         _ballMesh.position.x += _ballSpeedComponents.speedX;
         _ballMesh.position.z += _ballSpeedComponents.speedZ;        
     },
 
-    _fnCalculateBallSpeedComponents = function() {
-        _ballSpeedComponents = {};
-        _ballSpeedComponents.speedX = _directionTangent*_gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(_directionTangent,2));
-        _ballSpeedComponents.speedZ = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(_directionTangent,2));
+    _fnResetGame = function() {
+        _ballMesh.position.x = 0;
+        _ballMesh.position.z = 0; 
+
+        _fnCalculateBallSpeedComponents(1);
     },
 
-    _setDirection = function() {
+    _fnIsHumanPaddle = function(paddle) {
+        return paddle.position.z > 0;
+    },
 
+    _fnPaddleToInterceptBall = function() {
+        var paddle = null;
+
+        if(_ballMesh.position.z >= _humanPaddleMesh.position.z - _gameOptions.paddleThickness/2) {
+            paddle = _humanPaddleMesh;
+        } 
+
+        if(_ballMesh.position.z <= _computerPaddleMesh.position.z + _gameOptions.paddleThickness/2) {
+            paddle = _computerPaddleMesh;          
+        }
+
+        return paddle;
+    },
+
+    _fnIsBallIntercepted = function(paddle) {
+        return _ballMesh.position.x >= (paddle.position.x - _gameOptions.paddleWidth/2) &&
+        _ballMesh.position.x <= (paddle.position.x + _gameOptions.paddleWidth/2);
+    },
+
+    _fnCalculateBallSpeedComponents = function(directionTangent) {
+        _ballSpeedComponents = {};
+        _ballSpeedComponents.speedX = directionTangent*_gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
+        _ballSpeedComponents.speedZ = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
     },
 
     _setKeyboard = function() {
