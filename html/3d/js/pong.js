@@ -202,12 +202,28 @@ matrixresort.pong = (function($) {
     },
 
     _fnHumanPaddleMove = function() {
-        if(_keysPressed.left && _humanPaddleMesh.position.x > -(_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2) {
+        var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
+
+        if(_keysPressed.left && _humanPaddleMesh.position.x > -maxPaddleDistanceFromCenter) {
             _humanPaddleMesh.position.x -= 4;
-        } else if(_keysPressed.right  && _humanPaddleMesh.position.x < (_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2) {     
+        } else if(_keysPressed.right  && _humanPaddleMesh.position.x < maxPaddleDistanceFromCenter) {    
            _humanPaddleMesh.position.x += 4;         
         }
     }, 
+
+    _fnComputerPaddleMove = function() {
+        var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
+
+        var shift = _ballMesh.position.x - _computerPaddleMesh.position.x;
+
+        if(_computerPaddleMesh.position.x + shift > -maxPaddleDistanceFromCenter  && _computerPaddleMesh.position.x + shift < maxPaddleDistanceFromCenter) {      
+            _computerPaddleMesh.position.x += shift;
+        }
+    },    
+
+    _fnGetMaxPaddleDistanceFromCenter = function() {
+        return (_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2;
+    },
 
     _fnBallMove = function(delta) {
         if(!_ballSpeedComponents) {
@@ -343,13 +359,16 @@ matrixresort.pong = (function($) {
         _cameraControls.update(delta);
         _renderer.render(_scene, _camera);
 
+        _fnHumanPaddleMove();
+        _fnComputerPaddleMove();
+
         if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
             if(_deltaSinceLastScoreChange > 0) {
                 _deltaSinceLastScoreChange = -1;
                 _ballMesh.position.y = _gameOptions.ballRadius;
                 _ballMesh.material.color.set(_gameOptions.ballColor);
             }
-            _fnHumanPaddleMove();
+
             _fnBallMove(delta);
         } else {
             _deltaSinceLastScoreChange += delta;               
