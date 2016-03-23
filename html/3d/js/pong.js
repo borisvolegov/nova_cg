@@ -25,12 +25,13 @@ matrixresort.pong = (function($) {
         "ballRadius": 8,
         "paddleWidth": 64,
         "paddleThickness": 8,
-        "paddleColor": new THREE.Color("blue"),
+        "paddleHumanColor": new THREE.Color("blue"),
+        "paddleComputerColor": new THREE.Color("red"),       
         "wallWidth": 4,
         "wallHeight": 64,
-        "wallColor": new THREE.Color("red"),
+        "wallColor": new THREE.Color("beige"),
         "ballSpeed": 4,
-        "pauseAfterScoreChange": 5
+        "pauseAfterScoreChange": 4
     },
     _planeMesh,
     _ballMesh,
@@ -39,6 +40,9 @@ matrixresort.pong = (function($) {
     _keysPressed = {left: false, right: false},
     _ballSpeedComponents = null,
     _deltaSinceLastScoreChange = -1,
+    _humanScore = 0,
+    _computerScore = 0,
+    _scoreBoard,
 
     fnInit = function(gameCanvasElementID, gameOptions) {
         _gameCanvasElementID = gameCanvasElementID;
@@ -81,6 +85,7 @@ matrixresort.pong = (function($) {
         if (canvas.length>0) {
             container.removeChild(canvas[0]);
         }
+
         container.appendChild(_renderer.domElement);
     },    
 
@@ -92,6 +97,8 @@ matrixresort.pong = (function($) {
         _fnCreateBall();
 
         _fnCreatePaddles();
+
+        _fnCreateScoreBoard();
 
         // randomBoxes(100, 5, 20, 5, 60);
 
@@ -147,10 +154,12 @@ matrixresort.pong = (function($) {
     _fnCreatePaddles = function() {
         var paddleHeight = 32;
         var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, _gameOptions.paddleThickness);  
-        var paddleMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        _humanPaddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
-        _computerPaddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
+        var paddleHumanMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleHumanColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+        var paddleComputerMaterial = new THREE.MeshLambertMaterial({transparent: true, color: _gameOptions.paddleComputerColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+
+        _humanPaddleMesh = new THREE.Mesh(paddleGeometry, paddleHumanMaterial);
+        _computerPaddleMesh = new THREE.Mesh(paddleGeometry, paddleComputerMaterial);
 
         _scene.add(_humanPaddleMesh);
         _scene.add(_computerPaddleMesh);  
@@ -158,6 +167,39 @@ matrixresort.pong = (function($) {
         _humanPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, (_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);
         _computerPaddleMesh.position = new THREE.Vector3(0, paddleHeight/2, -(_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);        
     },  
+
+    _fnCreateScoreBoard = function() {
+        _scoreBoard = new THREE.Object3D(); 
+
+        var scoreHumanMesh = _fnCreateScoreBoardPiece(_humanScore, _gameOptions.paddleHumanColor, -64);
+        var scoreDividerMesh = _fnCreateScoreBoardPiece(" : ", new THREE.Color("white"), 0);  
+        var scoreComputerMesh = _fnCreateScoreBoardPiece(_computerScore, _gameOptions.paddleComputerColor, 64); 
+         
+        _scoreBoard.add(scoreHumanMesh);
+        _scoreBoard.add(scoreDividerMesh);
+        _scoreBoard.add(scoreComputerMesh);
+
+        _scoreBoard.updateScore = function()  {
+            _scene.remove(_scoreBoard);
+            _fnCreateScoreBoard();
+        };
+
+        _scene.add(_scoreBoard);
+        _scoreBoard.position.y = 144;
+    }, 
+
+    _fnCreateScoreBoardPiece = function(text, color, translateX) {
+        var scorePieceGeometry = new THREE.TextGeometry(text, {font: "helvetiker", style:"normal", size: 24, height: 2, curveSegments: 3, bevelEnabled: false});  
+        var scorePieceMaterial = new THREE.MeshBasicMaterial({color: color});
+
+        THREE.GeometryUtils.center(scorePieceGeometry); 
+
+        var scorePieceMesh = new THREE.Mesh(scorePieceGeometry, scorePieceMaterial);
+
+        scorePieceMesh.translateX(translateX);
+
+        return scorePieceMesh;
+    },
 
     _fnHumanPaddleMove = function() {
         if(_keysPressed.left && _humanPaddleMesh.position.x > -(_gameOptions.fieldWidth - _gameOptions.wallWidth - _gameOptions.paddleWidth)/2) {
@@ -187,6 +229,14 @@ matrixresort.pong = (function($) {
                 _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;      
             } else {
                 _deltaSinceLastScoreChange = 0;
+
+                if(_fnIsHumanPaddle(paddleToInterceptBall)) {
+                    _computerScore += 1;
+                } else {
+                    _humanScore += 1;
+                }
+
+                _scoreBoard.updateScore();
                 // handle score
                 _fnResetGame();  
 
