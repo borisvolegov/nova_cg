@@ -29,9 +29,10 @@ matrixresort.pong = (function($) {
         "pauseAfterScoreChange": 4,                            
         "paddleWidth": 64,
         "paddleThickness": 8,
+        "paddleComputerColor": new THREE.Color("red"),          
         "paddleComputerMaxSpeed": 3.5,        
         "paddleHumanColor": new THREE.Color("blue"),
-        "paddleComputerColor": new THREE.Color("red"),       
+        "paddleHumanSpeed": 4,     
         "wallColor": new THREE.Color("beige"),
         "wallHeight": 64,   
         "wallWidth": 4,             
@@ -190,7 +191,7 @@ matrixresort.pong = (function($) {
 
         _threejs.scene.add(_gameObjects.scoreBoard.root);
         _gameObjects.scoreBoard.root.position.setY(144);
-    }, 
+    }, a
 
     _fnCreateScoreBoardPiece = function(text, color, translateX) {
         var fontLoader = new THREE.FontLoader();
@@ -207,55 +208,71 @@ matrixresort.pong = (function($) {
 
             setTimeout(function(){_gameObjects.scoreBoard.root.add(scorePiece)});           
         });  
-    },
+    },    
 
     _fnHumanPaddleMove = function() {
         var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
 
         if(_keysPressed.left && _gameObjects.humanPaddle.position.x > -maxPaddleDistanceFromCenter) {
-            _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x-4);
+            _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
         } else if(_keysPressed.right  && _gameObjects.humanPaddle.position.x < maxPaddleDistanceFromCenter) {    
-           _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x+4);       
+           _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x+_gameOptions.paddleHumanSpeed);       
         }
     }, 
 
     _fnComputerPaddleMove = function() {
         var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
 
+        // shift in the direction of the ball
         var shift = _gameObjects.ball.position.x - _gameObjects.computerPaddle.position.x;
 
+        // restrict the speed of computer to give the human chance to win
         if(shift > _gameOptions.paddleComputerMaxSpeed) {
             shift = _gameOptions.paddleComputerMaxSpeed;
         }
 
+        // make sure that paddle stays on the field
         if(_gameObjects.computerPaddle.position.x + shift > -maxPaddleDistanceFromCenter  && _gameObjects.computerPaddle.position.x + shift < maxPaddleDistanceFromCenter) {      
             _gameObjects.computerPaddle.position.x += shift;
         }
     },    
 
+    // calculate how far the center of the paddle is allowed to shift in x-direction
     _fnGetMaxPaddleDistanceFromCenter = function() {
         return (_gameOptions.fieldWidth - _gameOptions.paddleWidth)/2 - _gameOptions.wallWidth;
     },
 
+    _fnGetMaxBallDistanceFromCenter = function() {
+        return (_gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius);
+    },    
+
     _fnBallMove = function(delta) {
+        // if ball doesn't know where to go, set it direction by passing direction angle tangent
         if(!_ballSpeedComponents) {
-            _fnCalculateBallSpeedComponents(1);
+            _fnSetBallSpeedComponents(1);
         }
 
-        if(_gameObjects.ball.position.x >= _gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius) {
-            _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;          
-        }
+        var maxBallDistanceFromCenter = _fnGetMaxBallDistanceFromCenter();
 
-        if(_gameObjects.ball.position.x <= -(_gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius)) {
+        // ball bounces back off the wall
+        if(_gameObjects.ball.position.x >= maxBallDistanceFromCenter ||
+            _gameObjects.ball.position.x <= -maxBallDistanceFromCenter) {
             _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;                
         }   
 
         var paddleToInterceptBall = _fnPaddleToInterceptBall();
 
+        // if it's the interception situation
         if(paddleToInterceptBall != null) {
+            // check if the paddle actually intercepted the ball
             var distanceFromPaddleCenter = _fnIsBallIntercepted(paddleToInterceptBall);
-            if(distanceFromPaddleCenter >= 0) {     
-                if(_fnIsHumanPaddle(paddleToInterceptBall)) {
+            var isHumanPaddle = _fnIsHumanPaddle(paddleToInterceptBall);  
+
+            // if the ball was intercepted
+            if(distanceFromPaddleCenter >= 0) {  
+                // if it's human paddle the bounce logic is more interesting to introduce variability to the game.
+                // the bounce angle depends on how far from the center the ball struck the paddle.
+                if(isHumanPaddle) {
                     _fnBallBounceOffPaddle(distanceFromPaddleCenter);  
                 } else {
                     _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
@@ -263,7 +280,7 @@ matrixresort.pong = (function($) {
             } else {
                 _deltaSinceLastScoreChange = 0;
 
-                if(_fnIsHumanPaddle(paddleToInterceptBall)) {
+                if(isHumanPaddle) {
                     _gameObjects.scoreBoard.computerScore += 1;
                 } else {
                     _gameObjects.scoreBoard.humanScore += 1;
@@ -271,21 +288,21 @@ matrixresort.pong = (function($) {
 
                 _gameObjects.scoreBoard.updateScore();
                 // handle score
-                _fnResetGame();  
+                _fnResetGame(isHumanPaddle);  
 
                 return;
             }
-        }   
+        }
 
         _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _ballSpeedComponents.speedX);
-        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ);  
+        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ);                 
     },
 
     _fnBallBounceOffPaddle = function(distanceFromPaddleCenter) {
         var deltaAngle = Math.PI/6 * distanceFromPaddleCenter / (_gameOptions.paddleWidth / 2) - Math.PI/12;
 
         var minAngle = Math.Pi/12;
-        var maxAngle = 7*Math.PI/12;
+        var maxAngle = 5*Math.PI/12;
 
         var newAngle = Math.abs(Math.atan(_ballSpeedComponents.speedX / _ballSpeedComponents.speedZ)) + deltaAngle;
 
@@ -302,8 +319,10 @@ matrixresort.pong = (function($) {
         directionSignZ = _ballSpeedComponents.speedZ > 0 ? 1 : -1;
         directionSignX = _ballSpeedComponents.speedX > 0 ? 1 : -1;
 
-        _ballSpeedComponents.speedZ = Math.abs(_gameOptions.ballSpeed/(Math.sqrt(1+Math.pow(newAngleTan,2))))*(-directionSignZ);
-        _ballSpeedComponents.speedX = Math.abs(_ballSpeedComponents.speedZ * newAngleTan)*directionSignX;
+        _fnSetBallSpeedComponents(newAngleTan);
+
+        _ballSpeedComponents.speedZ = Math.abs(_ballSpeedComponents.speedZ)*(-directionSignZ);
+        _ballSpeedComponents.speedX = Math.abs(_ballSpeedComponents.speedX)*directionSignX;
     },
 
     _fnBallJump = function() {
@@ -316,11 +335,15 @@ matrixresort.pong = (function($) {
         _gameObjects.ball.material.color.setHSL(hue, currentHSL.s, currentHSL.l);
     },
 
-    _fnResetGame = function() {
+    _fnResetGame = function(isHumanPaddle) {
         _gameObjects.ball.position.setX(0);
         _gameObjects.ball.position.setZ(0); 
 
-        _fnCalculateBallSpeedComponents(1);
+        _fnSetBallSpeedComponents(1);
+
+        if(isHumanPaddle) {
+            _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
+        }
     },
 
     _fnIsHumanPaddle = function(paddle) {
@@ -328,17 +351,12 @@ matrixresort.pong = (function($) {
     },
 
     _fnPaddleToInterceptBall = function() {
-        var paddle = null;
-
-        if(_gameObjects.ball.position.z >= _gameObjects.humanPaddle.position.z - _gameOptions.paddleThickness/2) {
-            paddle = _gameObjects.humanPaddle;
-        } 
-
-        if(_gameObjects.ball.position.z <= _gameObjects.computerPaddle.position.z + _gameOptions.paddleThickness/2) {
-            paddle = _gameObjects.computerPaddle;          
+        // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
+        if(Math.abs(_gameObjects.ball.position.z) >= Math.abs(_gameOptions.fieldLength/2 - _gameOptions.paddleThickness - _gameOptions.ballRadius)) {
+            return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        } else {
+            return null;
         }
-
-        return paddle;
     },
 
     _fnIsBallIntercepted = function(paddle) {
@@ -348,8 +366,11 @@ matrixresort.pong = (function($) {
         } else return -1;
     },
 
-    _fnCalculateBallSpeedComponents = function(directionTangent) {
-        _ballSpeedComponents = {};
+    _fnSetBallSpeedComponents = function(directionTangent) {
+        if(!_ballSpeedComponents) {
+            _ballSpeedComponents = {};
+        }
+
         _ballSpeedComponents.speedX = directionTangent*_gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
         _ballSpeedComponents.speedZ = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
     },
