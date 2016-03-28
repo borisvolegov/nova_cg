@@ -22,19 +22,21 @@ matrixresort.pong = (function($) {
         "ballColor": new THREE.Color("#ADFF2F"),
         "ballRadius": 8,
         "ballSpeed": 6,     
-        "cameraPosition": {"x": 0, "y": 300, "z": 600},
+        "cameraPosition": {"x": 0, "y": 200, "z": 600},
         "fieldColor": new THREE.Color("gray"), 
         "fieldLength": 512,     
         "fieldWidth": 384, 
+        "fieldHeight": 128,
         "pauseAfterScoreChange": 4,                            
-        "paddleWidth": 64,
+        "paddleWidth": 86,
+        "paddleHeight": 64,
         "paddleThickness": 8,
         "paddleComputerColor": new THREE.Color("red"),          
-        "paddleComputerMaxSpeed": 3.5,        
+        "paddleComputerMaxSpeed": 2,        
         "paddleHumanColor": new THREE.Color("blue"),
-        "paddleHumanSpeed": 4,     
-        "wallColor": new THREE.Color("beige"),
-        "wallHeight": 64,   
+        "paddleHumanSpeed": 6,     
+        "planeThickness": 4,
+        "wallColor": new THREE.Color("beige"),  
         "wallWidth": 4,             
     },
     _gameObjects = {
@@ -48,7 +50,7 @@ matrixresort.pong = (function($) {
             "computerScore": 0
         }
     },
-    _keysPressed = {left: false, right: false},
+    _keysPressed = {left: false, right: false, up: false, down: false},
     _ballSpeedComponents = null,
     _deltaSinceLastScoreChange = -1,
 
@@ -98,52 +100,56 @@ matrixresort.pong = (function($) {
     },    
 
     _fnCreateScene = function() {
-        _fnCreatePlane();
+        _fnCreatePlanes();
 
         _fnCreateWalls();
 
-        _fnCreateBall();
-
-        _fnCreatePaddles();
+        _fnCreatePaddles();   
 
         _fnCreateScoreBoard();
 
-        // randomBoxes(100, 5, 20, 5, 60);
+        _fnCreateBall();
 
         var light1 = new THREE.PointLight(0xFFFFFF, 1, 1000 );
-        light1.position.set(100, 100, 150);
+        light1.position.set(100, 100, 200);
 
-        // var light2 = new THREE.PointLight(0xFFFFFF, 1, 1000 );
-        // light2.position.set(-100, -100, 150);    
+        var light2 = new THREE.PointLight(0xFFFFFF, 1, 1000 );
+        light2.position.set(-100, -100, -200);    
 
         var ambientLight = new THREE.AmbientLight(0x222222);
 
         _threejs.scene.add(light1);
-        // scene.add(light2);    
+        _threejs.scene.add(light2); 
+
         _threejs.scene.add(ambientLight);
     },
 
-    _fnCreatePlane = function() {
-        var planeGeometry = new THREE.BoxGeometry(_gameOptions.fieldWidth, 0.1, _gameOptions.fieldLength);    
-        var planeMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: _gameOptions.fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+    _fnCreatePlanes = function() {
+        var planeGeometry = new THREE.BoxGeometry(_gameOptions.fieldWidth + _gameOptions.wallWidth*2, _gameOptions.planeThickness, _gameOptions.fieldLength);    
+        var planeBottomMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: _gameOptions.fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+        var planeTopMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: _gameOptions.fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        _gameObjects.plane = new THREE.Mesh(planeGeometry, planeMaterial);
-        _gameObjects.plane.position.set(0, 0, 0);
-        _threejs.scene.add(_gameObjects.plane);     
+        _gameObjects.bottomPlane = new THREE.Mesh(planeGeometry, planeBottomMaterial);
+        _gameObjects.bottomPlane.position.set(0, -(_gameOptions.fieldHeight+_gameOptions.planeThickness)/2, 0);
+        _threejs.scene.add(_gameObjects.bottomPlane);     
+
+        _gameObjects.topPlane = new THREE.Mesh(planeGeometry, planeTopMaterial);
+        _gameObjects.topPlane.position.set(0, (_gameOptions.fieldHeight+_gameOptions.planeThickness)/2, 0);
+        _threejs.scene.add(_gameObjects.topPlane);         
     },
 
     _fnCreateWalls = function() {
-        var wallGeometry = new THREE.BoxGeometry(_gameOptions.wallWidth, _gameOptions.wallHeight, _gameOptions.fieldLength);    
-        var wallMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: _gameOptions.wallColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+        var wallSideGeometry = new THREE.BoxGeometry(_gameOptions.wallWidth, _gameOptions.fieldHeight, _gameOptions.fieldLength);    
+        var wallSideMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: _gameOptions.wallColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        var rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
-        var leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        var rightWall = new THREE.Mesh(wallSideGeometry, wallSideMaterial);
+        var leftWall = new THREE.Mesh(wallSideGeometry, wallSideMaterial);
 
-        leftWall.position.set(-(_gameOptions.fieldWidth - _gameOptions.wallWidth)/2, _gameOptions.wallHeight/2, 0);
-        rightWall.position.set((_gameOptions.fieldWidth - _gameOptions.wallWidth)/2,  _gameOptions.wallHeight/2, 0);
+        leftWall.position.set(-(_gameOptions.fieldWidth + _gameOptions.wallWidth)/2, 0, 0);
+        rightWall.position.set((_gameOptions.fieldWidth + _gameOptions.wallWidth)/2, 0, 0);      
 
         _threejs.scene.add(rightWall);  
-        _threejs.scene.add(leftWall);    
+        _threejs.scene.add(leftWall);   
     },
 
     _fnCreateBall = function() {
@@ -160,11 +166,10 @@ matrixresort.pong = (function($) {
     },
 
     _fnCreatePaddles = function() {
-        var paddleHeight = 32;
-        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, paddleHeight, _gameOptions.paddleThickness);  
+        var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, _gameOptions.paddleHeight, _gameOptions.paddleThickness);  
 
-        var paddleHumanMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.paddleHumanColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
-        var paddleComputerMaterial = new THREE.MeshLambertMaterial({transparent: false, color: _gameOptions.paddleComputerColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+        var paddleHumanMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: _gameOptions.paddleHumanColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+        var paddleComputerMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: _gameOptions.paddleComputerColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
         _gameObjects.humanPaddle = new THREE.Mesh(paddleGeometry, paddleHumanMaterial);
         _gameObjects.computerPaddle = new THREE.Mesh(paddleGeometry, paddleComputerMaterial);
@@ -172,8 +177,8 @@ matrixresort.pong = (function($) {
         _threejs.scene.add(_gameObjects.humanPaddle);
         _threejs.scene.add(_gameObjects.computerPaddle);  
 
-        _gameObjects.humanPaddle.position.set(0, paddleHeight/2, (_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);
-        _gameObjects.computerPaddle.position.set(0, paddleHeight/2, -(_gameOptions.fieldLength - _gameOptions.paddleThickness)/2);        
+        _gameObjects.humanPaddle.position.set(0, _gameOptions.paddleHeight/2, (_gameOptions.fieldLength + _gameOptions.paddleThickness)/2);
+        _gameObjects.computerPaddle.position.set(0, _gameOptions.paddleHeight/2, -(_gameOptions.fieldLength + _gameOptions.paddleThickness)/2);        
     },  
 
     _fnCreateScoreBoard = function() {
@@ -191,7 +196,7 @@ matrixresort.pong = (function($) {
 
         _threejs.scene.add(_gameObjects.scoreBoard.root);
         _gameObjects.scoreBoard.root.position.setY(144);
-    }, a
+    }, 
 
     _fnCreateScoreBoardPiece = function(text, color, translateX) {
         var fontLoader = new THREE.FontLoader();
@@ -211,72 +216,94 @@ matrixresort.pong = (function($) {
     },    
 
     _fnHumanPaddleMove = function() {
-        var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
+        var limits = _fnGetMaxPaddleDistanceFromCenter();
 
-        if(_keysPressed.left && _gameObjects.humanPaddle.position.x > -maxPaddleDistanceFromCenter) {
+        if(_keysPressed.left && _gameObjects.humanPaddle.position.x > -limits.xDirection) {
             _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
-        } else if(_keysPressed.right  && _gameObjects.humanPaddle.position.x < maxPaddleDistanceFromCenter) {    
+        } else if(_keysPressed.right  && _gameObjects.humanPaddle.position.x < limits.xDirection) {    
            _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x+_gameOptions.paddleHumanSpeed);       
+        } else if(_keysPressed.up  && _gameObjects.humanPaddle.position.y < limits.yDirection) {
+            _gameObjects.humanPaddle.position.setY(_gameObjects.humanPaddle.position.y+_gameOptions.paddleHumanSpeed); 
+        }  else if(_keysPressed.down  && _gameObjects.humanPaddle.position.y > -limits.yDirection) {
+            _gameObjects.humanPaddle.position.setY(_gameObjects.humanPaddle.position.y-_gameOptions.paddleHumanSpeed); 
         }
     }, 
 
     _fnComputerPaddleMove = function() {
-        var maxPaddleDistanceFromCenter = _fnGetMaxPaddleDistanceFromCenter();
+        var limits = _fnGetMaxPaddleDistanceFromCenter();
 
         // shift in the direction of the ball
-        var shift = _gameObjects.ball.position.x - _gameObjects.computerPaddle.position.x;
+        var shiftX = _gameObjects.ball.position.x - _gameObjects.computerPaddle.position.x;
+        var shiftY = _gameObjects.ball.position.y - _gameObjects.computerPaddle.position.y;        
 
         // restrict the speed of computer to give the human chance to win
-        if(shift > _gameOptions.paddleComputerMaxSpeed) {
+        if(Math.sqrt(Math.pow(shiftX,2) + Math.pow(shiftY,2)) > _gameOptions.paddleComputerMaxSpeed) {
             shift = _gameOptions.paddleComputerMaxSpeed;
         }
 
         // make sure that paddle stays on the field
-        if(_gameObjects.computerPaddle.position.x + shift > -maxPaddleDistanceFromCenter  && _gameObjects.computerPaddle.position.x + shift < maxPaddleDistanceFromCenter) {      
-            _gameObjects.computerPaddle.position.x += shift;
+        if(_gameObjects.computerPaddle.position.x + shiftX > -limits.xDirection  && _gameObjects.computerPaddle.position.x + shiftX < limits.xDirection) {      
+            _gameObjects.computerPaddle.position.x += shiftX;
+        }
+
+        if(_gameObjects.computerPaddle.position.y + shiftY > -limits.yDirection  && _gameObjects.computerPaddle.position.y + shiftY < limits.yDirection) {      
+            _gameObjects.computerPaddle.position.y += shiftY;
         }
     },    
 
     // calculate how far the center of the paddle is allowed to shift in x-direction
     _fnGetMaxPaddleDistanceFromCenter = function() {
-        return (_gameOptions.fieldWidth - _gameOptions.paddleWidth)/2 - _gameOptions.wallWidth;
+        return {
+            "xDirection": (_gameOptions.fieldWidth - _gameOptions.paddleWidth)/2,
+            "yDirection": (_gameOptions.fieldHeight - _gameOptions.paddleHeight)/2
+        };
     },
 
     _fnGetMaxBallDistanceFromCenter = function() {
-        return (_gameOptions.fieldWidth/2 - _gameOptions.wallWidth - _gameOptions.ballRadius);
+        return {
+            "xDirection": _gameOptions.fieldWidth/2 - _gameOptions.ballRadius,
+            "yDirection": _gameOptions.fieldHeight/2 - _gameOptions.ballRadius
+        };
     },    
 
     _fnBallMove = function(delta) {
-        // if ball doesn't know where to go, set it direction by passing direction angle tangent
+        // if ball doesn't know where to go, set it direction by passing direction angles tangents
         if(!_ballSpeedComponents) {
-            _fnSetBallSpeedComponents(1);
+            _fnSetBallSpeedComponents(1, 1);
         }
 
-        var maxBallDistanceFromCenter = _fnGetMaxBallDistanceFromCenter();
+        var limits = _fnGetMaxBallDistanceFromCenter();
 
         // ball bounces back off the wall
-        if(_gameObjects.ball.position.x >= maxBallDistanceFromCenter ||
-            _gameObjects.ball.position.x <= -maxBallDistanceFromCenter) {
+        if(_gameObjects.ball.position.x >= limits.xDirection ||
+            _gameObjects.ball.position.x <= -limits.xDirection) {
             _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;                
         }   
+
+        if(_gameObjects.ball.position.y >= limits.yDirection ||
+            _gameObjects.ball.position.y <= -limits.yDirection) {
+            _ballSpeedComponents.speedY = -_ballSpeedComponents.speedY;                
+        }          
 
         var paddleToInterceptBall = _fnPaddleToInterceptBall();
 
         // if it's the interception situation
         if(paddleToInterceptBall != null) {
             // check if the paddle actually intercepted the ball
-            var distanceFromPaddleCenter = _fnIsBallIntercepted(paddleToInterceptBall);
+            var wasIntercepted = _fnIsBallIntercepted(paddleToInterceptBall);
             var isHumanPaddle = _fnIsHumanPaddle(paddleToInterceptBall);  
 
             // if the ball was intercepted
-            if(distanceFromPaddleCenter >= 0) {  
-                // if it's human paddle the bounce logic is more interesting to introduce variability to the game.
-                // the bounce angle depends on how far from the center the ball struck the paddle.
-                if(isHumanPaddle) {
-                    _fnBallBounceOffPaddle(distanceFromPaddleCenter);  
-                } else {
+            if(wasIntercepted) {  
                     _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
-                }         
+
+                // // if it's human paddle the bounce logic is more interesting to introduce variability to the game.
+                // // the bounce angle depends on how far from the center the ball struck the paddle.
+                // if(isHumanPaddle) {
+                //     _fnBallBounceOffPaddle(distanceFromPaddleCenter);  
+                // } else {
+                //     _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
+                // }         
             } else {
                 _deltaSinceLastScoreChange = 0;
 
@@ -295,6 +322,7 @@ matrixresort.pong = (function($) {
         }
 
         _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _ballSpeedComponents.speedX);
+        _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _ballSpeedComponents.speedY);        
         _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ);                 
     },
 
@@ -337,9 +365,10 @@ matrixresort.pong = (function($) {
 
     _fnResetGame = function(isHumanPaddle) {
         _gameObjects.ball.position.setX(0);
+        _gameObjects.ball.position.setY(0);        
         _gameObjects.ball.position.setZ(0); 
 
-        _fnSetBallSpeedComponents(1);
+        _fnSetBallSpeedComponents(1, 1);
 
         if(isHumanPaddle) {
             _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
@@ -352,7 +381,7 @@ matrixresort.pong = (function($) {
 
     _fnPaddleToInterceptBall = function() {
         // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
-        if(Math.abs(_gameObjects.ball.position.z) >= Math.abs(_gameOptions.fieldLength/2 - _gameOptions.paddleThickness - _gameOptions.ballRadius)) {
+        if(Math.abs(_gameObjects.ball.position.z) >= Math.abs(_gameOptions.fieldLength/2 - _gameOptions.ballRadius)) {
             return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
         } else {
             return null;
@@ -360,19 +389,23 @@ matrixresort.pong = (function($) {
     },
 
     _fnIsBallIntercepted = function(paddle) {
-        if(_gameObjects.ball.position.x >= (paddle.position.x - _gameOptions.paddleWidth/2) &&
-        _gameObjects.ball.position.x <= (paddle.position.x + _gameOptions.paddleWidth/2)) {
-            return Math.abs(_gameObjects.ball.position.x - paddle.position.x)
-        } else return -1;
+        return (
+            _gameObjects.ball.position.x >= (paddle.position.x - _gameOptions.paddleWidth/2) &&
+            _gameObjects.ball.position.x <= (paddle.position.x + _gameOptions.paddleWidth/2) 
+            && 
+            _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2) &&
+            _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2)             
+        );
     },
 
-    _fnSetBallSpeedComponents = function(directionTangent) {
+    _fnSetBallSpeedComponents = function(directionTangentXZ, directionTangentXY) {
         if(!_ballSpeedComponents) {
             _ballSpeedComponents = {};
         }
 
-        _ballSpeedComponents.speedX = directionTangent*_gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
-        _ballSpeedComponents.speedZ = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangent,2));
+        _ballSpeedComponents.speedX = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangentXZ,2) + Math.pow(directionTangentXY,2));
+        _ballSpeedComponents.speedY = _ballSpeedComponents.speedX * directionTangentXY;
+        _ballSpeedComponents.speedZ = _ballSpeedComponents.speedX * directionTangentXZ;
     },
 
     _setKeyboard = function() {
@@ -386,9 +419,26 @@ matrixresort.pong = (function($) {
                 case 39:
                     _keysPressed.right = true;
                     break;
+                case 38:
+                    _keysPressed.up = true;
+                    break;
+                case 40:
+                    _keysPressed.down = true;
+                    break;
+                case 72:
+                    _keysPressed.rotateYForward = true;
+                    break;     
+                case 74:
+                    _keysPressed.rotateXForward = true;
+                    break;
+                case 75:
+                    _keysPressed.rotateYBackward = true;
+                    break;  
+                case 76:
+                    _keysPressed.rotateXBackward = true;
+                    break;                                         
                 default:
                     preventEventPropogation = false;
-
                 if(preventEventPropogation) {
                     e.preventDefault();
                 } else {
@@ -407,6 +457,24 @@ matrixresort.pong = (function($) {
                 case 39:
                     _keysPressed.right = false;
                     break;
+                case 38:
+                    _keysPressed.up = false;
+                    break;
+                case 40:
+                    _keysPressed.down = false;
+                    break;
+                case 72:
+                    _keysPressed.rotateYForward = false;
+                    break;     
+                case 74:
+                    _keysPressed.rotateXForward = false;
+                    break;
+                case 75:
+                    _keysPressed.rotateYBackward = false;
+                    break;  
+                case 76:
+                    _keysPressed.rotateXBackward = false;
+                    break;                       
                 default:
                     preventEventPropogation = false;
 
@@ -427,18 +495,18 @@ matrixresort.pong = (function($) {
         _fnHumanPaddleMove();
         _fnComputerPaddleMove();
 
-        if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
-            if(_deltaSinceLastScoreChange > 0) {
-                _deltaSinceLastScoreChange = -1;
-                _gameObjects.ball.position.setY(_gameOptions.ballRadius);
-                _gameObjects.ball.material.color.set(_gameOptions.ballColor);
-            }
+        // if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+        //     if(_deltaSinceLastScoreChange > 0) {
+        //         _deltaSinceLastScoreChange = -1;
+        //         _gameObjects.ball.position.setY(_gameOptions.ballRadius);
+        //         _gameObjects.ball.material.color.set(_gameOptions.ballColor);
+        //     }
 
             _fnBallMove(delta);
-        } else {
-            _deltaSinceLastScoreChange += delta;               
-            _fnBallJump();         
-        }
+        // } else {
+        //     _deltaSinceLastScoreChange += delta;               
+        //     _fnBallJump();         
+        // }
     },
 
     _fnAnimate = function() {
