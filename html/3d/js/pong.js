@@ -21,7 +21,7 @@ matrixresort.pong = (function($) {
     _defaultGameOptions = {
         "ballColor": new THREE.Color("#ADFF2F"),
         "ballRadius": 8,
-        "ballSpeed": 6,     
+        "ballSpeed": 8,     
         "cameraPosition": {"x": 0, "y": 200, "z": 600},
         "fieldColor": new THREE.Color("gray"), 
         "fieldLength": 512,     
@@ -32,7 +32,7 @@ matrixresort.pong = (function($) {
         "paddleHeight": 64,
         "paddleThickness": 8,
         "paddleComputerColor": new THREE.Color("red"),          
-        "paddleComputerMaxSpeed": 2,        
+        "paddleComputerMaxSpeed": 5,        
         "paddleHumanColor": new THREE.Color("blue"),
         "paddleHumanSpeed": 6,     
         "planeThickness": 4,
@@ -42,6 +42,8 @@ matrixresort.pong = (function($) {
     _gameObjects = {
         "plane": null,
         "ball": null,
+        "lineZ" : null,
+        "lineX" : null,        
         "humanPaddle": null,
         "computerPaddle": null,
         "scoreBoard": {
@@ -158,11 +160,25 @@ matrixresort.pong = (function($) {
 
         _gameObjects.ball = new THREE.Mesh(ballGeometry, ballMaterial);
 
-        _threejs.scene.add(_gameObjects.ball);
+        _threejs.scene.add(_gameObjects.ball);    
 
         _gameObjects.ball.position.setX(0);
         _gameObjects.ball.position.setY(_gameOptions.ballRadius);
         _gameObjects.ball.position.setZ(0);
+
+        var lineMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: _gameOptions.ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+
+        var lineZGeometry = new THREE.CylinderGeometry(0.5, 0.5, _gameOptions.fieldLength, 20, 20);
+        var lineXGeometry = new THREE.CylinderGeometry(0.5, 0.5, _gameOptions.fieldWidth, 20, 20);
+         
+        
+        _gameObjects.lineZ = new THREE.Mesh(lineZGeometry, lineMaterial);   
+        _gameObjects.lineZ.rotation.x = Math.PI /2; 
+        _gameObjects.lineX = new THREE.Mesh(lineXGeometry, lineMaterial);          
+        _gameObjects.lineX.rotation.z = Math.PI /2; 
+
+        _threejs.scene.add(_gameObjects.lineZ);  
+        _threejs.scene.add(_gameObjects.lineX);  
     },
 
     _fnCreatePaddles = function() {
@@ -234,11 +250,29 @@ matrixresort.pong = (function($) {
 
         // shift in the direction of the ball
         var shiftX = _gameObjects.ball.position.x - _gameObjects.computerPaddle.position.x;
-        var shiftY = _gameObjects.ball.position.y - _gameObjects.computerPaddle.position.y;        
+        var shiftY = _gameObjects.ball.position.y - _gameObjects.computerPaddle.position.y;   
+
+        console.log('original shiftX: ' + shiftX);
+        console.log('original shiftY: ' + shiftY);    
+
+        var directionX = shiftX > 0 ? 1 : -1;
+        var directionY = shiftY > 0 ? 1 : -1;
 
         // restrict the speed of computer to give the human chance to win
-        if(Math.sqrt(Math.pow(shiftX,2) + Math.pow(shiftY,2)) > _gameOptions.paddleComputerMaxSpeed) {
-            shift = _gameOptions.paddleComputerMaxSpeed;
+        var actualBallSpeed = Math.sqrt(Math.pow(shiftX,2) + Math.pow(shiftY,2));
+        if(actualBallSpeed > _gameOptions.paddleComputerMaxSpeed) {
+
+            if (shiftX == 0) {
+                shiftY = _gameOptions.paddleComputerMaxSpeed;
+            } else if (shiftY == 0) {
+                shiftX = _gameOptions.paddleComputerMaxSpeed;                
+            } else {
+                var ratio = Math.abs(shiftX / shiftY);
+                var shiftYAbs = _gameOptions.paddleComputerMaxSpeed / Math.sqrt(Math.pow(ratio, 2) + 1);
+                shiftX = (ratio * shiftYAbs) * directionX;
+                shiftY = shiftYAbs * directionY;
+                console.log('ratio: ' + ratio);   
+            }
         }
 
         // make sure that paddle stays on the field
@@ -249,6 +283,9 @@ matrixresort.pong = (function($) {
         if(_gameObjects.computerPaddle.position.y + shiftY > -limits.yDirection  && _gameObjects.computerPaddle.position.y + shiftY < limits.yDirection) {      
             _gameObjects.computerPaddle.position.y += shiftY;
         }
+
+        console.log('calculated shiftX: ' + shiftX);
+        console.log('calculated shiftY: ' + shiftY);   
     },    
 
     // calculate how far the center of the paddle is allowed to shift in x-direction
@@ -323,7 +360,13 @@ matrixresort.pong = (function($) {
 
         _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _ballSpeedComponents.speedX);
         _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _ballSpeedComponents.speedY);        
-        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ);                 
+        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ);  
+
+        _gameObjects.lineZ.position.setX(_gameObjects.ball.position.x);   
+        _gameObjects.lineZ.position.setY(_gameObjects.ball.position.y);  
+
+        _gameObjects.lineX.position.setZ(_gameObjects.ball.position.z); 
+        _gameObjects.lineX.position.setY(_gameObjects.ball.position.y);  
     },
 
     _fnBallBounceOffPaddle = function(distanceFromPaddleCenter) {
@@ -354,11 +397,12 @@ matrixresort.pong = (function($) {
     },
 
     _fnBallJump = function() {
-        var maxHeight = 32;
         var unscaledHeight = Math.abs(Math.sin(2 * _deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
         var hue = unscaledHeight;
 
-        _gameObjects.ball.position.setY(maxHeight * unscaledHeight + _gameOptions.ballRadius);
+        var heightRange = _gameOptions.fieldHeight - _gameOptions.ballRadius;
+
+        _gameObjects.ball.position.setY(heightRange * unscaledHeight - heightRange/2);
         var currentHSL = _gameObjects.ball.material.color.getHSL();
         _gameObjects.ball.material.color.setHSL(hue, currentHSL.s, currentHSL.l);
     },
@@ -495,18 +539,18 @@ matrixresort.pong = (function($) {
         _fnHumanPaddleMove();
         _fnComputerPaddleMove();
 
-        // if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
-        //     if(_deltaSinceLastScoreChange > 0) {
-        //         _deltaSinceLastScoreChange = -1;
-        //         _gameObjects.ball.position.setY(_gameOptions.ballRadius);
-        //         _gameObjects.ball.material.color.set(_gameOptions.ballColor);
-        //     }
+        if(_deltaSinceLastScoreChange == -1 || _deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+            if(_deltaSinceLastScoreChange > 0) {
+                _deltaSinceLastScoreChange = -1;
+                _gameObjects.ball.position.setY(_gameOptions.ballRadius);
+                _gameObjects.ball.material.color.set(_gameOptions.ballColor);
+            }
 
             _fnBallMove(delta);
-        // } else {
-        //     _deltaSinceLastScoreChange += delta;               
-        //     _fnBallJump();         
-        // }
+        } else {
+            _deltaSinceLastScoreChange += delta;               
+            _fnBallJump();         
+        }
     },
 
     _fnAnimate = function() {
