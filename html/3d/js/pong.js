@@ -429,6 +429,20 @@ matrixresort.pong = (function($) {
         paddle.position.setZ(newZ);
     },
 
+    _fnGetLogInfo = function(wasIntercepted) {
+        var logInfo = wasIntercepted ? "Intercepted!\n" : "Missed\n";
+        logInfo+= "ball position: [x: " + _gameObjects.ball.position.x + "]" + ", [y: " + _gameObjects.ball.position.y + "]" + ", [z: " + _gameObjects.ball.position.z + "]\n";
+        var transformedBallPosition = _fnConvertCoordinatesY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
+        logInfo += "ball transformed position: [x: " + transformedBallPosition.x + "]" + ", [y: " + transformedBallPosition.y + "]" + ", [z: " + transformedBallPosition.z + "]\n";
+        logInfo += "paddle center position: [x: " + _gameObjects.humanPaddle.position.x + "]" + ", [y: " + _gameObjects.humanPaddle.position.y + "]" + ", [z: " + (_gameObjects.humanPaddle.position.z+_gameOptions.paddleThickness) + "]\n";                  
+        var transformedPaddlePosition = _fnConvertCoordinatesY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameObjects.humanPaddle.position.z - _gameOptions.paddleThickness/2), _gameObjects.humanPaddle.rotation.y);
+        logInfo += "paddle center transformed position: [x: " + transformedPaddlePosition.x + "]" + ", [y: " + transformedPaddlePosition.y + "]" + ", [z: " + transformedPaddlePosition.z + "]\n";  
+        logInfo += "paddle rotation angle: " + _gameObjects.humanPaddle.rotation.y;
+
+        return logInfo;
+    },
+
+
     _fnBallMove = function(delta) {
         var limits = _fnGetMaxBallDistanceFromCenter();
 
@@ -446,6 +460,11 @@ matrixresort.pong = (function($) {
                 _deltaSinceLastIntercept = 0;
                 _isHumanLastIntercepted = isHumanPaddle;
 
+                if(isHumanPaddle) {
+                    console.log(_fnGetLogInfo(true));
+                }
+                    
+
                 // // if it's human paddle the bounce logic is more interesting to introduce variability to the game.
                 // // the bounce angle depends on how far from the center the ball struck the paddle.
                 // if(isHumanPaddle) {
@@ -458,6 +477,10 @@ matrixresort.pong = (function($) {
                 _gameObjects.scoreBoard.updateScore(isHumanPaddle);
 
                 _isHumanLastScored = !isHumanPaddle;
+
+                if(isHumanPaddle) {
+                    console.log(_fnGetLogInfo(false));
+                }
 
                 return;
             }
@@ -578,6 +601,9 @@ matrixresort.pong = (function($) {
 
         // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
         if(Math.abs(newBallCoordinates.z) >= Math.abs(paddlePlaneRotatedZ - _gameOptions.ballRadius)) {
+            if(_gameObjects.ball.position.z > 0) {
+                console.log("Inside: _fnPaddleToInterceptBall" + _fnGetLogInfo(true));
+            }
             return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
         } else {
             return null;
