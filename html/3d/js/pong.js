@@ -456,9 +456,28 @@ matrixresort.pong = (function($) {
 
             // if the ball was intercepted
             if(wasIntercepted) {  
-                _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
+
                 _deltaSinceLastIntercept = 0;
                 _isHumanLastIntercepted = isHumanPaddle;
+
+                var ballSpeedVector = new THREE.Vector3(_ballSpeedComponents.speedX, _ballSpeedComponents.speedY, _ballSpeedComponents.speedZ);
+
+                if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
+                    var logInfo = "speed: [x: " + ballSpeedVector.x + "], [y: " + ballSpeedVector.y + "], [z: " + ballSpeedVector.z + "]\n";
+                    var ballSpeedVectorTranslated = _fnConvertCoordinatesY(ballSpeedVector, _gameObjects.humanPaddle.rotation.y);
+                    logInfo += "translated current speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                    
+                    ballSpeedVectorTranslated.z = -ballSpeedVectorTranslated.z;
+                    logInfo += "translated bounced speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                      
+                    var ballSpeedComponentsAfterBouncing = _fnConvertCoordinatesY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
+                    logInfo += "bounced speed: [x: " + ballSpeedComponentsAfterBouncing.x + "], [y: " + ballSpeedComponentsAfterBouncing.y + "], [z: " + ballSpeedComponentsAfterBouncing.z + "]\n";                                        
+
+                    console.log(logInfo);
+
+                    _ballSpeedComponents.speedX = ballSpeedComponentsAfterBouncing.x;
+                    _ballSpeedComponents.speedZ = ballSpeedComponentsAfterBouncing.z;
+                } else {
+                    _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;               
+                }
 
                 if(isHumanPaddle) {
                     console.log(_fnGetLogInfo(true));
