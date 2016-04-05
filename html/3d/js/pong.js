@@ -29,6 +29,7 @@ matrixresort.pong = (function($) {
         "fieldLength": 512,     
         "fieldWidth": 384, 
         "fieldHeight": 128,
+        "gameInstructions": "Use arrow keys to move the paddle horizontally and vertically. Use <b>j</b> and <b>k</b> buttons to rotate the paddle.",
         "pauseAfterScoreChange": 4,                            
         "paddleWidth": 86,
         "paddleHeight": 64,
@@ -40,7 +41,7 @@ matrixresort.pong = (function($) {
         "paddleHumanRotationSpeed": Math.PI/12,
         "planeThickness": 4,
         "wallColor": "#F5F5DC",  
-        "wallThickness": 4
+        "wallThickness": 4,
     },       
      _controlOptions = {},
      _initOptions = {},
@@ -139,6 +140,11 @@ matrixresort.pong = (function($) {
         }
 
         container.appendChild(_threejs.renderer.domElement);
+
+        var menuGamenInstructions = $("div.dg.main.a li.cr.string:first-child");
+        menuGamenInstructions.css("height", "64px");
+        var gameInstructions = menuGamenInstructions.find("div.c input[type='text']").val();
+        $("div.dg.main.a li.cr.string:first-child div.c input[type='text']").replaceWith($("<div style='color:#2FA1D6'>" + gameInstructions + "</div>"));
     },    
 
     _fnCreateLights = function() {
@@ -691,6 +697,8 @@ matrixresort.pong = (function($) {
 
     _fnInitGui = function() {
         var gui = new dat.GUI({width: 500});
+
+        gui.add(_gameOptions, 'gameInstructions').name('Game instructions:');
   
         var ballFolder = gui.addFolder('Parameters of the ball');
 
