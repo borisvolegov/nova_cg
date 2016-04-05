@@ -29,8 +29,8 @@ matrixresort.pong = (function($) {
         "fieldLength": 512,     
         "fieldWidth": 384, 
         "fieldHeight": 128,
-        "gameInstructions": "Use arrow keys to move the paddle horizontally and vertically. Use <b>j</b> and <b>k</b> buttons to rotate the paddle.",
-        "pauseAfterScoreChange": 4,                            
+        "gameInstructions": "Use arrow keys to move the paddle horizontally and vertically. Use <b>J</b> and <b>K</b> buttons to rotate the paddle.",                        
+        "pauseAfterScoreChange": 5,                            
         "paddleWidth": 86,
         "paddleHeight": 64,
         "paddleThickness": 8,
@@ -325,33 +325,42 @@ matrixresort.pong = (function($) {
     },    
 
     _fnHumanPaddleMove = function() {
-        var limits  = _fnGetMaxPaddleDistanceFromCenter(_gameObjects.humanPaddle.rotation.y);
-        var newPosition;
+        var paddleRotationLimitAngle = 5*Math.PI/12;
+        var paddleRotationAngleIncrement = Math.PI/12;
+
+        var humanPaddle = _gameObjects.humanPaddle;
+        var limits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y);
 
         if(_keysPressed.left)  {
-            _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
-            if(_gameObjects.humanPaddle.position.x < -limits.xDirection) {
-                _gameObjects.humanPaddle.position.setX(-limits.xDirection);
+            humanPaddle.position.setX(humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
+            if(humanPaddle.position.x < -limits.xDirection) {
+                humanPaddle.position.setX(-limits.xDirection);
             }
         } else if(_keysPressed.right) {    
-           _gameObjects.humanPaddle.position.setX(_gameObjects.humanPaddle.position.x+_gameOptions.paddleHumanSpeed);  
-            if(_gameObjects.humanPaddle.position.x > limits.xDirection) {
-                _gameObjects.humanPaddle.position.setX(limits.xDirection);
+           humanPaddle.position.setX(humanPaddle.position.x+_gameOptions.paddleHumanSpeed);  
+            if(humanPaddle.position.x > limits.xDirection) {
+                humanPaddle.position.setX(limits.xDirection);
             }         
         } else if(_keysPressed.up) {
-            _gameObjects.humanPaddle.position.setY(_gameObjects.humanPaddle.position.y+_gameOptions.paddleHumanSpeed); 
-            if(_gameObjects.humanPaddle.position.y > limits.yDirection) {
-                _gameObjects.humanPaddle.position.setY(limits.yDirection);
+            humanPaddle.position.setY(humanPaddle.position.y+_gameOptions.paddleHumanSpeed); 
+            if(humanPaddle.position.y > limits.yDirection) {
+                humanPaddle.position.setY(limits.yDirection);
             }             
         } else if(_keysPressed.down) {
-            _gameObjects.humanPaddle.position.setY(_gameObjects.humanPaddle.position.y-_gameOptions.paddleHumanSpeed); 
-            if(_gameObjects.humanPaddle.position.y < -limits.yDirection) {
-                _gameObjects.humanPaddle.position.setY(-limits.yDirection);
+            humanPaddle.position.setY(humanPaddle.position.y-_gameOptions.paddleHumanSpeed); 
+            if(humanPaddle.position.y < -limits.yDirection) {
+                humanPaddle.position.setY(-limits.yDirection);
             }               
-        } else if(_keysPressed.rotateAroundYForward) {
-            _gameObjects.humanPaddle.rotation.y += Math.PI/12;           
+        } else if(_keysPressed.rotateAroundYForward) {  
+            var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
+            if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y + paddleRotationAngleIncrement <= paddleRotationLimitAngle) {
+                humanPaddle.rotation.y += paddleRotationAngleIncrement;
+            }
         } else if(_keysPressed.rotateAroundYBackward) {
-            _gameObjects.humanPaddle.rotation.y -= Math.PI/12;           
+            var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
+            if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y - paddleRotationAngleIncrement >= -paddleRotationLimitAngle) {
+                humanPaddle.rotation.y -= paddleRotationAngleIncrement;
+            }         
         }        
     }, 
 
@@ -572,18 +581,22 @@ matrixresort.pong = (function($) {
     },
 
     _fnBallJump = function() {
-        _gameObjects.ball.position.setX(0);
-        _gameObjects.ball.position.setY(0);        
-        _gameObjects.ball.position.setZ(0); 
+        if(_deltaSinceLastScoreChange < _gameOptions.pauseAfterScoreChange / 3) {
+            _gameObjects.ball.material.color = _isHumanLastScored ? new THREE.Color(_gameOptions.paddleHumanColor) : new THREE.Color(_gameOptions.paddleComputerColor);
+        } else {
+            _gameObjects.ball.position.setX(0);
+            _gameObjects.ball.position.setY(0);        
+            _gameObjects.ball.position.setZ(0); 
 
-        var limits = _fnGetMaxBallDistanceFromCenter();
+            var limits = _fnGetMaxBallDistanceFromCenter();
 
-        var unscaledHeight = Math.abs(Math.sin(2 * _deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
-        var hue = unscaledHeight;
+            var unscaledHeight = Math.abs(Math.sin(2 * _deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
+            var hue = unscaledHeight;
 
-        _gameObjects.ball.position.setY(limits.yDirection * unscaledHeight - limits.yDirection/2);
-        var currentHSL = _gameObjects.ball.material.color.getHSL();
-        _gameObjects.ball.material.color.setHSL(hue, currentHSL.s, currentHSL.l);
+            _gameObjects.ball.position.setY(limits.yDirection * unscaledHeight - limits.yDirection/2);
+            var currentHSL = _gameObjects.ball.material.color.getHSL();
+            _gameObjects.ball.material.color.setHSL(hue, currentHSL.s, currentHSL.l);
+        }
     },
 
     _fnContinueGame = function() {
@@ -614,6 +627,14 @@ matrixresort.pong = (function($) {
     },
 
     _fnPaddleToInterceptBall = function() {
+        if(Math.abs(_gameObjects.ball.position.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
+            return null;
+        }
+
+        if(Math.abs(_gameObjects.ball.position.z) > (_gameOptions.fieldLength + _gameOptions.paddleWidth)/2) {
+            return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        }
+
         var newBallCoordinates = _gameObjects.ball.position;
         var paddlePlaneRotatedZ = _gameOptions.fieldLength/2;
 
@@ -639,6 +660,10 @@ matrixresort.pong = (function($) {
         var newBallCoordinates = _gameObjects.ball.position;
         var newRotatedXOfPaddleCeneter = paddle.position.x;
         var paddlePlaneRotatedZ = _gameOptions.fieldLength/2;
+
+        if(Math.abs(newBallCoordinates.z) > (_gameOptions.fieldLength + _gameOptions.paddleWidth)/2) {
+            return false;
+        }
 
         if(_fnIsHumanPaddle(paddle)) {
             if(_gameObjects.humanPaddle.rotation.y != 0) {
@@ -874,10 +899,9 @@ matrixresort.pong = (function($) {
         _threejs.cameraControls.update(delta);
         _threejs.renderer.render(_threejs.scene, _threejs.camera);
 
-        _fnHumanPaddleMove();
-        _fnComputerPaddleMove(delta);
-
         if (_deltaSinceLastScoreChange == -1) {
+            _fnHumanPaddleMove();
+            _fnComputerPaddleMove(delta);            
             _fnBallMove(delta);       
         } else if (_deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
             _deltaSinceLastScoreChange = -1;
