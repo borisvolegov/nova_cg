@@ -87,7 +87,7 @@ matrixresort.pong = (function($) {
         _threejs.renderer.gammaOutput = true;
         _threejs.renderer.setSize(canvasWidth, canvasHeight);
         _threejs.renderer.setClearColor(0x000000, 1.0);   
-        _threejs.renderer.shadowMapEnabled = true;
+        _threejs.renderer.shadowMap.enabled = true;
   
         _threejs.camera = new THREE.PerspectiveCamera( 40, canvasRatio, 1, 1000);
         _threejs.camera.position.set(_gameOptions.cameraPosition.x, _gameOptions.cameraPosition.y, _gameOptions.cameraPosition.z);
@@ -154,12 +154,12 @@ matrixresort.pong = (function($) {
         //light1.shadowDarkness = 0.75;
 
         //light1.shadowCameraVisible = true;
-        light1.shadowCameraNear = 100;
-        light1.shadowCameraFar = 1000;
-        light1.shadowCameraLeft = -250;
-        light1.shadowCameraRight = 250;
-        light1.shadowCameraTop = 250;
-        light1.shadowCameraBottom = -250;        
+        light1.shadow.camera.near = 100;
+        light1.shadow.camera.far = 1000;
+        light1.shadow.camera.left = -250;
+        light1.shadow.camera.right = 250;
+        light1.shadow.camera.top = 250;
+        light1.shadow.camera.bottom = -250;        
 
         //light1.shadowCameraFov = 35;
 
@@ -314,7 +314,7 @@ matrixresort.pong = (function($) {
 
             var scorePieceMaterial = new THREE.MeshBasicMaterial({color: color});
         
-            THREE.GeometryUtils.center(scorePieceGeometry); 
+            scorePieceGeometry.center(); 
 
             var scorePiece = new THREE.Mesh(scorePieceGeometry, scorePieceMaterial);
 
