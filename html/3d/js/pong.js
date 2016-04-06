@@ -1,8 +1,8 @@
 /***********
  * pong.js
- * implementation of pong game 
+ * implementation of 3-D pong game 
  * Final Project for Computer Graphics class
- * B. Volegovme
+ * B. Volegov
  * March 2016
  ***********/
 "use strict";
@@ -19,7 +19,7 @@ matrixresort.pong = (function($) {
         "cameraControls": null,
         "clock": null,
     },
-    _gameOptions = {},
+    _gameOptions = {}, // obect to store actual game parameters. It's constructed by combining _defaultGameOptions and gameOptions parameters passed to fnInit function
     _defaultGameOptions = {
         "ballColor": "#ADFF2F",
         "ballRadius": 8,
@@ -42,9 +42,9 @@ matrixresort.pong = (function($) {
         "planeThickness": 4,
         "wallColor": "#F5F5DC",  
         "wallThickness": 4,
-    },       
-     _controlOptions = {},
-     _initOptions = {},
+    }, //default game parameters to be used if no corresponding parameters are passed to fnInit fucntion.
+     _controlOptions = {},  //dat.GUI control is configured to read values from and write values to this object.
+     _initOptions = {}, // object to preserve any game parameters passed to fnInit function
     _gameObjects = {
         "bottomPlane": null,
         "topPlane": null,
@@ -60,18 +60,29 @@ matrixresort.pong = (function($) {
             "humanScore": 0,
             "computerScore": 0
         }
-    },
-    _keysPressed = {left: false, right: false, up: false, down: false},
-    _ballSpeedComponents = null,
-    _deltaSinceLastScoreChange = 0,
-    _isHumanLastScored = null,    
-    _deltaSinceLastIntercept = -1,
-    _isHumanLastIntercepted = null,    
+    }, // all the scene graph objects
+    _runtime = {
+        "keysPressed": {left: false, right: false, up: false, down: false, rotateAroundYForward: false, rotateAroundYBackward: false}, // structure to capture the keys pressed.
+        "ballSpeedComponents": null,    
+        "deltaSinceLastScoreChange": 0,
+        "isHumanLastScored": null,    
+        "deltaSinceLastIntercept": -1,
+        "isHumanLastIntercepted": null
+    },    
 
+    /*  fnInit function takes two arguments 
+        gameCanvasElementID: DOM elementID of game container DIV
+        gameOptions: any game parameters specified in this object will take precedence over default parameters.
+        if an ampty object is passed for gameOptions, the values specified in _defaultGameOptions are used.
+    */
     fnInit = function(gameCanvasElementID, gameOptions) {
-        _gameCanvasElementID = gameCanvasElementID;
+        _gameCanvasElementID = gameCanvasElementID;        
+
+        // passed gameOptions are captured in order to have ability to reconstruct the original game options.
         _initOptions = gameOptions;
+        // _defaultGameOptions and _initOptions are combined to produce the actual _gameOptions which will be used.
         $.extend(_gameOptions, _defaultGameOptions, _initOptions);
+        // _controlOptions is the object
         _controlOptions = $.extend({}, _gameOptions);
 
         _threejs.clock = new THREE.Clock();
@@ -151,39 +162,17 @@ matrixresort.pong = (function($) {
         var light1 = new THREE.DirectionalLight(0xFFFFFF, 1, 1000 );
         light1.position.set(0, 250, 300);
         light1.castShadow = true;
-        //light1.shadowDarkness = 0.75;
 
-        //light1.shadowCameraVisible = true;
         light1.shadow.camera.near = 100;
         light1.shadow.camera.far = 1000;
         light1.shadow.camera.left = -250;
         light1.shadow.camera.right = 250;
         light1.shadow.camera.top = 250;
-        light1.shadow.camera.bottom = -250;        
+        light1.shadow.camera.bottom = -250;   
 
-        //light1.shadowCameraFov = 35;
-
-
-        // light1.shadowMapWidth = 1024;
-        // light1.shadowMapHeight = 1024;
-
-
-        // light1.shadowCameraRight     =  256;
-        // light1.shadowCameraLeft     = -256;
-        // light1.shadowCameraTop      =  64;
-        // light1.shadowCameraBottom   = -64;
-
-
-        // var light2 = new THREE.SpotLight(0xFFFFFF, 1, 1000 );
-        // light2.position.set(-50, 200, -400);
-        // light2.castShadow = true;
-        // light2.shadowDarkness = 0.75;
+        _threejs.scene.add(light1);     
 
         var ambientLight = new THREE.AmbientLight(0x222222);
-
-        _threejs.scene.add(light1);
-        // _threejs.scene.add(light2); 
-
         _threejs.scene.add(ambientLight);    
     },
 
@@ -331,32 +320,32 @@ matrixresort.pong = (function($) {
         var humanPaddle = _gameObjects.humanPaddle;
         var limits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y);
 
-        if(_keysPressed.left)  {
+        if(_runtime.keysPressed.left)  {
             humanPaddle.position.setX(humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
             if(humanPaddle.position.x < -limits.xDirection) {
                 humanPaddle.position.setX(-limits.xDirection);
             }
-        } else if(_keysPressed.right) {    
+        } else if(_runtime.keysPressed.right) {    
            humanPaddle.position.setX(humanPaddle.position.x+_gameOptions.paddleHumanSpeed);  
             if(humanPaddle.position.x > limits.xDirection) {
                 humanPaddle.position.setX(limits.xDirection);
             }         
-        } else if(_keysPressed.up) {
+        } else if(_runtime.keysPressed.up) {
             humanPaddle.position.setY(humanPaddle.position.y+_gameOptions.paddleHumanSpeed); 
             if(humanPaddle.position.y > limits.yDirection) {
                 humanPaddle.position.setY(limits.yDirection);
             }             
-        } else if(_keysPressed.down) {
+        } else if(_runtime.keysPressed.down) {
             humanPaddle.position.setY(humanPaddle.position.y-_gameOptions.paddleHumanSpeed); 
             if(humanPaddle.position.y < -limits.yDirection) {
                 humanPaddle.position.setY(-limits.yDirection);
             }               
-        } else if(_keysPressed.rotateAroundYForward) {  
+        } else if(_runtime.keysPressed.rotateAroundYForward) {  
             var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
             if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y + paddleRotationAngleIncrement <= paddleRotationLimitAngle) {
                 humanPaddle.rotation.y += paddleRotationAngleIncrement;
             }
-        } else if(_keysPressed.rotateAroundYBackward) {
+        } else if(_runtime.keysPressed.rotateAroundYBackward) {
             var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
             if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y - paddleRotationAngleIncrement >= -paddleRotationLimitAngle) {
                 humanPaddle.rotation.y -= paddleRotationAngleIncrement;
@@ -427,18 +416,18 @@ matrixresort.pong = (function($) {
     },   
 
     _fnPaddleWobble  = function() {
-        var paddle = _isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
         var timeToWobble = 1;
 
         var unscaledOffset = 0;
-        if(_deltaSinceLastIntercept > timeToWobble) {
+        if(_runtime.deltaSinceLastIntercept > timeToWobble) {
             unscaledOffset = 0;
-            _deltaSinceLastIntercept = -1;
+            _runtime.deltaSinceLastIntercept = -1;
         } else {
-            unscaledOffset = Math.sin(_deltaSinceLastIntercept *  Math.PI / timeToWobble);
+            unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
         }
 
-        var wobbleDirection = _isHumanLastIntercepted ? 1 : -1;
+        var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
         var newZ = ((_gameOptions.fieldLength + _gameOptions.paddleThickness)/2 + 32 * unscaledOffset) * wobbleDirection;
 
         paddle.position.setZ(newZ);
@@ -472,14 +461,12 @@ matrixresort.pong = (function($) {
             // if the ball was intercepted
             if(wasIntercepted) {  
 
-                _deltaSinceLastIntercept = 0;
-                _isHumanLastIntercepted = isHumanPaddle;
-
-                var ballSpeedVector = new THREE.Vector3(_ballSpeedComponents.speedX, _ballSpeedComponents.speedY, _ballSpeedComponents.speedZ);
+                _runtime.deltaSinceLastIntercept = 0;
+                _runtime.isHumanLastIntercepted = isHumanPaddle;
 
                 if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
-                    var logInfo = "speed: [x: " + ballSpeedVector.x + "], [y: " + ballSpeedVector.y + "], [z: " + ballSpeedVector.z + "]\n";
-                    var ballSpeedVectorTranslated = _fnConvertCoordinatesY(ballSpeedVector, _gameObjects.humanPaddle.rotation.y);
+                    var logInfo = "speed: [x: " + _runtime.ballSpeedComponents.x + "], [y: " + _runtime.ballSpeedComponents.y + "], [z: " + _runtime.ballSpeedComponents.z + "]\n";
+                    var ballSpeedVectorTranslated = _fnConvertCoordinatesY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);
                     logInfo += "translated current speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                    
                     ballSpeedVectorTranslated.z = -ballSpeedVectorTranslated.z;
                     logInfo += "translated bounced speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                      
@@ -488,10 +475,10 @@ matrixresort.pong = (function($) {
 
                     console.log(logInfo);
 
-                    _ballSpeedComponents.speedX = ballSpeedComponentsAfterBouncing.x;
-                    _ballSpeedComponents.speedZ = ballSpeedComponentsAfterBouncing.z;
+                    _runtime.ballSpeedComponents.x = ballSpeedComponentsAfterBouncing.x;
+                    _runtime.ballSpeedComponents.y = ballSpeedComponentsAfterBouncing.z;
                 } else {
-                    _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;               
+                    _runtime.ballSpeedComponents.z = -_runtime.ballSpeedComponents.z;               
                 }
 
                 if(isHumanPaddle) {
@@ -504,13 +491,13 @@ matrixresort.pong = (function($) {
                 // if(isHumanPaddle) {
                 //     _fnBallBounceOffPaddle(distanceFromPaddleCenter);  
                 // } else {
-                //     _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
+                //     _runtime.ballSpeedComponents.speedZ = -_runtime.ballSpeedComponents.speedZ;
                 // }         
             } else if(Math.abs(_gameObjects.ball.position.z) > _gameOptions.fieldWidth/2) {
-                _deltaSinceLastScoreChange = 0;
+                _runtime.deltaSinceLastScoreChange = 0;
                 _gameObjects.scoreBoard.updateScore(isHumanPaddle);
 
-                _isHumanLastScored = !isHumanPaddle;
+                _runtime.isHumanLastScored = !isHumanPaddle;
 
                 if(isHumanPaddle) {
                     console.log(_fnGetLogInfo(false));
@@ -521,29 +508,29 @@ matrixresort.pong = (function($) {
         }
 
 
-        _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _ballSpeedComponents.speedX * delta);
-        _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _ballSpeedComponents.speedY * delta);        
-        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _ballSpeedComponents.speedZ * delta);  
+        _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _runtime.ballSpeedComponents.x * delta);
+        _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _runtime.ballSpeedComponents.y * delta);        
+        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _runtime.ballSpeedComponents.z * delta);  
 
         // ball bounces back off the walls or top/bottom planes
         if(_gameObjects.ball.position.x >= limits.xDirection) {
             _gameObjects.ball.position.setX(limits.xDirection);
-            _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;   
+            _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
         } 
 
         if(_gameObjects.ball.position.x <= -limits.xDirection) {
             _gameObjects.ball.position.setX(-limits.xDirection);
-            _ballSpeedComponents.speedX = -_ballSpeedComponents.speedX;   
+            _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
         } 
 
         if(_gameObjects.ball.position.y >= limits.yDirection) {
             _gameObjects.ball.position.setY(limits.yDirection);
-            _ballSpeedComponents.speedY = -_ballSpeedComponents.speedY;   
+            _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
         }  
 
         if(_gameObjects.ball.position.y <= -limits.yDirection) {
             _gameObjects.ball.position.setY(-limits.yDirection);
-            _ballSpeedComponents.speedY = -_ballSpeedComponents.speedY;   
+            _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
         } 
 
         // _gameObjects.lineZ.position.setX(_gameObjects.ball.position.x);   
@@ -559,7 +546,7 @@ matrixresort.pong = (function($) {
         var minAngle = Math.Pi/12;
         var maxAngle = 5*Math.PI/12;
 
-        var newAngle = Math.abs(Math.atan(_ballSpeedComponents.speedX / _ballSpeedComponents.speedZ)) + deltaAngle;
+        var newAngle = Math.abs(Math.atan(_runtime.ballSpeedComponents.x / _runtime.ballSpeedComponents.z)) + deltaAngle;
 
         if(newAngle < minAngle) {
             newAngle =  minAngle;
@@ -571,18 +558,18 @@ matrixresort.pong = (function($) {
 
         var newAngleTan = Math.tan(newAngle);
 
-        directionSignZ = _ballSpeedComponents.speedZ > 0 ? 1 : -1;
-        directionSignX = _ballSpeedComponents.speedX > 0 ? 1 : -1;
+        directionSignZ = _runtime.ballSpeedComponents.z > 0 ? 1 : -1;
+        directionSignX = _runtime.ballSpeedComponents.x > 0 ? 1 : -1;
 
         _fnSetBallSpeedComponents(newAngleTan);
 
-        _ballSpeedComponents.speedZ = Math.abs(_ballSpeedComponents.speedZ)*(-directionSignZ);
-        _ballSpeedComponents.speedX = Math.abs(_ballSpeedComponents.speedX)*directionSignX;
+        _runtime.ballSpeedComponents.z = Math.abs(_runtime.ballSpeedComponents.z)*(-directionSignZ);
+        _runtime.ballSpeedComponents.x = Math.abs(_runtime.ballSpeedComponents.x)*directionSignX;
     },
 
     _fnBallJump = function() {
-        if(_deltaSinceLastScoreChange < _gameOptions.pauseAfterScoreChange / 3) {
-            _gameObjects.ball.material.color = _isHumanLastScored ? new THREE.Color(_gameOptions.paddleHumanColor) : new THREE.Color(_gameOptions.paddleComputerColor);
+        if(_runtime.deltaSinceLastScoreChange < _gameOptions.pauseAfterScoreChange / 3) {
+            _gameObjects.ball.material.color = _runtime.isHumanLastScored ? new THREE.Color(_gameOptions.paddleHumanColor) : new THREE.Color(_gameOptions.paddleComputerColor);
         } else {
             _gameObjects.ball.position.setX(0);
             _gameObjects.ball.position.setY(0);        
@@ -590,7 +577,7 @@ matrixresort.pong = (function($) {
 
             var limits = _fnGetMaxBallDistanceFromCenter();
 
-            var unscaledHeight = Math.abs(Math.sin(2 * _deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
+            var unscaledHeight = Math.abs(Math.sin(2 * _runtime.deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
             var hue = unscaledHeight;
 
             _gameObjects.ball.position.setY(limits.yDirection * unscaledHeight - limits.yDirection/2);
@@ -609,12 +596,12 @@ matrixresort.pong = (function($) {
         // if ball doesn't know where to go, set it direction by passing direction angles tangents
         _fnSetBallSpeedComponents(1, 1);
 
-        if(_isHumanLastScored == null) {
-            _isHumanLastScored = _fnGetRandomBoolean();              
+        if(_runtime.isHumanLastScored == null) {
+            _runtime.isHumanLastScored = _fnGetRandomBoolean();              
         }
         
-        if(!_isHumanLastScored) {
-            _ballSpeedComponents.speedZ = -_ballSpeedComponents.speedZ;
+        if(!_runtime.isHumanLastScored) {
+            _runtime.ballSpeedComponents.z = -_runtime.ballSpeedComponents.z;
         }
     },
 
@@ -711,13 +698,13 @@ matrixresort.pong = (function($) {
     // },
 
     _fnSetBallSpeedComponents = function(directionTangentXZ, directionTangentXY) {
-        if(!_ballSpeedComponents) {
-            _ballSpeedComponents = {};
+        if(!_runtime.ballSpeedComponents) {
+            _runtime.ballSpeedComponents = new THREE.Vector3(0,0,0);
         }
 
-        _ballSpeedComponents.speedX = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangentXZ,2) + Math.pow(directionTangentXY,2));
-        _ballSpeedComponents.speedY = _ballSpeedComponents.speedX * directionTangentXY;
-        _ballSpeedComponents.speedZ = _ballSpeedComponents.speedX * directionTangentXZ;
+        _runtime.ballSpeedComponents.x = _gameOptions.ballSpeed/Math.sqrt(1 + Math.pow(directionTangentXZ,2) + Math.pow(directionTangentXY,2));
+        _runtime.ballSpeedComponents.y = _runtime.ballSpeedComponents.x * directionTangentXY;
+        _runtime.ballSpeedComponents.z = _runtime.ballSpeedComponents.x * directionTangentXZ;
     },
 
     _fnInitGui = function() {
@@ -795,28 +782,28 @@ matrixresort.pong = (function($) {
 
                 switch(e.keyCode) {
                 case 37:
-                    _keysPressed.left = true;
+                    _runtime.keysPressed.left = true;
                     break;
                 case 39:
-                    _keysPressed.right = true;
+                    _runtime.keysPressed.right = true;
                     break;
                 case 38:
-                    _keysPressed.up = true;
+                    _runtime.keysPressed.up = true;
                     break;
                 case 40:
-                    _keysPressed.down = true;
+                    _runtime.keysPressed.down = true;
                     break;
                 case 72:
-                    _keysPressed.rotateAroundXForward = true;
+                    _runtime.keysPressed.rotateAroundXForward = true;
                     break;     
                 case 74:
-                    _keysPressed.rotateAroundYForward = true;
+                    _runtime.keysPressed.rotateAroundYForward = true;
                     break;
                 case 75:
-                    _keysPressed.rotateAroundYBackward = true;
+                    _runtime.keysPressed.rotateAroundYBackward = true;
                     break;  
                 case 76:
-                    _keysPressed.rotateAroundXBackward = true;
+                    _runtime.keysPressed.rotateAroundXBackward = true;
                     break;                                         
                 default:
                     preventEventPropogation = false;
@@ -833,28 +820,28 @@ matrixresort.pong = (function($) {
 
                 switch(e.keyCode) {
                 case 37:
-                    _keysPressed.left = false;
+                    _runtime.keysPressed.left = false;
                     break;
                 case 39:
-                    _keysPressed.right = false;
+                    _runtime.keysPressed.right = false;
                     break;
                 case 38:
-                    _keysPressed.up = false;
+                    _runtime.keysPressed.up = false;
                     break;
                 case 40:
-                    _keysPressed.down = false;
+                    _runtime.keysPressed.down = false;
                     break;
                 case 72:
-                    _keysPressed.rotateAroundXForward = false;
+                    _runtime.keysPressed.rotateAroundXForward = false;
                     break;    
                 case 74:
-                    _keysPressed.rotateAroundYForward = false;
+                    _runtime.keysPressed.rotateAroundYForward = false;
                     break;
                 case 75:
-                    _keysPressed.rotateAroundYBackward = false;
+                    _runtime.keysPressed.rotateAroundYBackward = false;
                     break;  
                 case 76:
-                    _keysPressed.rotateAroundXBackward = false;
+                    _runtime.keysPressed.rotateAroundXBackward = false;
                     break;                       
                 default:
                     preventEventPropogation = false;
@@ -887,11 +874,11 @@ matrixresort.pong = (function($) {
         _gameObjects.scoreBoard.humanScore = 0;
         _gameObjects.scoreBoard.computerScore = 0;
 
-        _keysPressed = {left: false, right: false, up: false, down: false};
-        _ballSpeedComponents = null;
-        _deltaSinceLastScoreChange = 0;
-        _deltaSinceLastIntercept = -1;        
-        _isHumanLastScored = null;     
+        _runtime.keysPressed = {left: false, right: false, up: false, down: false};
+        _runtime.ballSpeedComponents = null;
+        _runtime.deltaSinceLastScoreChange = 0;
+        _runtime.deltaSinceLastIntercept = -1;        
+        _runtime.isHumanLastScored = null;     
     },
 
     _fnRender = function() {
@@ -899,20 +886,20 @@ matrixresort.pong = (function($) {
         _threejs.cameraControls.update(delta);
         _threejs.renderer.render(_threejs.scene, _threejs.camera);
 
-        if (_deltaSinceLastScoreChange == -1) {
+        if (_runtime.deltaSinceLastScoreChange == -1) {
             _fnHumanPaddleMove();
             _fnComputerPaddleMove(delta);            
             _fnBallMove(delta);       
-        } else if (_deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
-            _deltaSinceLastScoreChange = -1;
+        } else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+            _runtime.deltaSinceLastScoreChange = -1;
             _fnContinueGame();
         } else {
-            _deltaSinceLastScoreChange += delta;               
+            _runtime.deltaSinceLastScoreChange += delta;               
             _fnBallJump();         
         }
 
-        if(_deltaSinceLastIntercept >= 0) {
-            _deltaSinceLastIntercept += delta;              
+        if(_runtime.deltaSinceLastIntercept >= 0) {
+            _runtime.deltaSinceLastIntercept += delta;              
             _fnPaddleWobble();            
         }  
     },
