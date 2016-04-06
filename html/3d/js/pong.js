@@ -44,7 +44,6 @@ matrixresort.pong = (function($) {
         "wallThickness": 4,
     }, //default game parameters to be used if no corresponding parameters are passed to fnInit fucntion.
      _controlOptions = {},  //dat.GUI control is configured to read values from and write values to this object.
-     _initOptions = {}, // object to preserve any game parameters passed to fnInit function
     _gameObjects = {
         "bottomPlane": null,
         "topPlane": null,
@@ -61,14 +60,15 @@ matrixresort.pong = (function($) {
             "computerScore": 0
         }
     }, // all the scene graph objects
-    _runtime = {
+    _startRuntime = {
         "keysPressed": {left: false, right: false, up: false, down: false, rotateAroundYForward: false, rotateAroundYBackward: false}, // structure to capture the keys pressed.
         "ballSpeedComponents": null,    
         "deltaSinceLastScoreChange": 0,
         "isHumanLastScored": null,    
         "deltaSinceLastIntercept": -1,
         "isHumanLastIntercepted": null
-    },    
+    },  // object to contain the parameters that change at runtime 
+    _runtime = null, 
 
     /*  fnInit function takes two arguments 
         gameCanvasElementID: DOM elementID of game container DIV
@@ -78,13 +78,15 @@ matrixresort.pong = (function($) {
     fnInit = function(gameCanvasElementID, gameOptions) {
         _gameCanvasElementID = gameCanvasElementID;        
 
-        // passed gameOptions are captured in order to have ability to reconstruct the original game options.
-        _initOptions = gameOptions;
-        // _defaultGameOptions and _initOptions are combined to produce the actual _gameOptions which will be used.
-        $.extend(_gameOptions, _defaultGameOptions, _initOptions);
+        // _defaultGameOptions and gameOptions are combined to produce the actual _gameOptions which will be used.
+        $.extend(_gameOptions, _defaultGameOptions, gameOptions);
         // _controlOptions is the object
         _controlOptions = $.extend({}, _gameOptions);
 
+        // set _runtime to contain default values from _startRuntime
+        _runtime = $.extend({}, _startRuntime);
+
+        // building and initializing three.js objects (as usual)
         _threejs.clock = new THREE.Clock();
 
         var canvasWidth = window.innerWidth;
@@ -106,11 +108,12 @@ matrixresort.pong = (function($) {
 
         _threejs.cameraControls = new THREE.OrbitControls(_threejs.camera, _threejs.renderer.domElement); 
 
+        // constructing and adding 3D-pong objects to the scene
         _fnCreateScene();
 
         _fnCreateLights();
 
-        _fnInitGui();        
+        _fnInitDatGUI();        
 
         _fnAddToDOM();
 
@@ -121,89 +124,58 @@ matrixresort.pong = (function($) {
         _fnAnimate();        
     },
 
-    fnUpdateSettings = function(){
-        if(_gameObjects != null && _threejs.scene != null) {
-            _fnResetGame();
-        }
 
-        _gameOptions = $.extend({}, _gameOptions, _controlOptions);
-        _fnCreateScene();
-    },  
 
-     fnResetSettings = function() {
-        _controlOptions = {};
-        _gameOptions = $.extend({}, _defaultGameOptions, _initOptions);
-
-        fnUpdateSettings();
-    },     
-
-    fnResetScore = function() {
-        _gameOptions = $.extend({}, _defaultGameOptions, _initOptions);
-
-        fnUpdateSettings();
-    },   
-    
-    _fnAddToDOM = function() {
-        var container = document.getElementById(_gameCanvasElementID);
-        var canvas = container.getElementsByTagName('canvas');
-        if (canvas.length>0) {
-            container.removeChild(canvas[0]);
-        }
-
-        container.appendChild(_threejs.renderer.domElement);
-
-        var menuGamenInstructions = $("div.dg.main.a li.cr.string:first-child");
-        menuGamenInstructions.css("height", "64px");
-        var gameInstructions = menuGamenInstructions.find("div.c input[type='text']").val();
-        $("div.dg.main.a li.cr.string:first-child div.c input[type='text']").replaceWith($("<div style='color:#2FA1D6'>" + gameInstructions + "</div>"));
-    },    
-
-    _fnCreateLights = function() {
-        var light1 = new THREE.DirectionalLight(0xFFFFFF, 1, 1000 );
-        light1.position.set(0, 250, 300);
-        light1.castShadow = true;
-
-        light1.shadow.camera.near = 100;
-        light1.shadow.camera.far = 1000;
-        light1.shadow.camera.left = -250;
-        light1.shadow.camera.right = 250;
-        light1.shadow.camera.top = 250;
-        light1.shadow.camera.bottom = -250;   
-
-        _threejs.scene.add(light1);     
-
-        var ambientLight = new THREE.AmbientLight(0x222222);
-        _threejs.scene.add(ambientLight);    
-    },
-
+/************************************************************************************************/
+//  all the _fnCreateXXXXXX methods
     _fnCreateScene = function() {
+        // creating top and bottom planes
         _fnCreatePlanes();
 
+        // creating walls
         _fnCreateWalls();
 
+        // creating human and computer paddles
         _fnCreatePaddles();   
 
+        // creating score board
         _fnCreateScoreBoard();
 
+        // creating ball
         _fnCreateBall();
     },
 
+    _fnClearScene = function() {
+        _threejs.scene.remove(_gameObjects.bottomPlane);
+        _threejs.scene.remove(_gameObjects.topPlane);        
+        _threejs.scene.remove(_gameObjects.ball);   
+        _threejs.scene.remove(_gameObjects.humanPaddle);  
+        _threejs.scene.remove(_gameObjects.computerPaddle); 
+        _threejs.scene.remove(_gameObjects.scoreBoard.root); 
+        _threejs.scene.remove(_gameObjects.leftWall); 
+        _threejs.scene.remove(_gameObjects.rightWall); 
+    },    
+
     _fnCreatePlanes = function() {
+        // 'width of the plane' is sum of 'width of the field' and thickness of both walls
         var planeGeometry = new THREE.BoxGeometry(_gameOptions.fieldWidth + _gameOptions.wallThickness*2, _gameOptions.planeThickness, _gameOptions.fieldLength);   
 
         var fieldColor = new THREE.Color(_gameOptions.fieldColor); 
+
         var planeBottomMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.8, color: fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
         var planeTopMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: fieldColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
-        _gameObjects.bottomPlane = new THREE.Mesh(planeGeometry, planeBottomMaterial);
-        _gameObjects.bottomPlane.position.set(0, -(_gameOptions.fieldHeight+_gameOptions.planeThickness)/2, 0);
-        _threejs.scene.add(_gameObjects.bottomPlane);     
+        // place the top plane half of the 'field hieght' above the 'y = 0' plane
+        var planeTopPositionY = _gameOptions.fieldHeight/2 + _gameOptions.planeThickness/2;
 
         _gameObjects.topPlane = new THREE.Mesh(planeGeometry, planeTopMaterial);
-        _gameObjects.topPlane.position.set(0, (_gameOptions.fieldHeight+_gameOptions.planeThickness)/2, 0);
+        _gameObjects.topPlane.position.set(0, planeTopPositionY, 0);
 
-        _gameObjects.bottomPlane.receiveShadow = true;
+        _gameObjects.bottomPlane = new THREE.Mesh(planeGeometry, planeBottomMaterial);
+        _gameObjects.bottomPlane.position.set(0, -planeTopPositionY, 0);
+        _gameObjects.bottomPlane.receiveShadow = true; // make bottom plane to receive shadow from the ball
 
+        _threejs.scene.add(_gameObjects.bottomPlane);     
         _threejs.scene.add(_gameObjects.topPlane);         
     },
 
@@ -215,49 +187,23 @@ matrixresort.pong = (function($) {
         _gameObjects.rightWall = new THREE.Mesh(wallSideGeometry, wallSideMaterial);
         _gameObjects.leftWall = new THREE.Mesh(wallSideGeometry, wallSideMaterial);
 
-        _gameObjects.leftWall.position.set(-(_gameOptions.fieldWidth + _gameOptions.wallThickness)/2, 0, 0);
-        _gameObjects.rightWall.position.set((_gameOptions.fieldWidth + _gameOptions.wallThickness)/2, 0, 0);           
+        // place the right wall half of the 'field width' to the right of the 'x = 0' plane
+        var wallRightPositionX = _gameOptions.fieldWidth/2 + _gameOptions.wallThickness/2;
+
+        _gameObjects.leftWall.position.set(-wallRightPositionX, 0, 0);
+        _gameObjects.rightWall.position.set(wallRightPositionX, 0, 0);           
 
         _threejs.scene.add(_gameObjects.rightWall);  
         _threejs.scene.add(_gameObjects.leftWall);   
-    },
-
-    _fnCreateBall = function() {
-        var ballGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
-        var ballColor = new THREE.Color(_gameOptions.ballColor);
-        var ballMaterial = new THREE.MeshLambertMaterial({transparent: false, color: ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
-
-        _gameObjects.ball = new THREE.Mesh(ballGeometry, ballMaterial);
-
-        _threejs.scene.add(_gameObjects.ball);    
-
-        _gameObjects.ball.position.setX(0);
-        _gameObjects.ball.position.setY(_gameOptions.ballRadius);
-        _gameObjects.ball.position.setZ(0);
-
-        _gameObjects.ball.castShadow = true;
-
-        // var lineMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
-
-        // var lineZGeometry = new THREE.CylinderGeometry(0.5, 0.5, _gameOptions.fieldLength, 20, 20);
-        // var lineXGeometry = new THREE.CylinderGeometry(0.5, 0.5, _gameOptions.fieldWidth, 20, 20);
-         
-        
-        // _gameObjects.lineZ = new THREE.Mesh(lineZGeometry, lineMaterial);   
-        // _gameObjects.lineZ.rotation.x = Math.PI /2; 
-        // _gameObjects.lineX = new THREE.Mesh(lineXGeometry, lineMaterial);          
-        // _gameObjects.lineX.rotation.z = Math.PI /2; 
-
-        // _threejs.scene.add(_gameObjects.lineZ);  
-        // _threejs.scene.add(_gameObjects.lineX);  
     },
 
     _fnCreatePaddles = function() {
         var paddleGeometry = new THREE.CubeGeometry(_gameOptions.paddleWidth, _gameOptions.paddleHeight, _gameOptions.paddleThickness);  
 
         var paddleHumanColor = new THREE.Color(_gameOptions.paddleHumanColor);
+        var paddleHumanMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: paddleHumanColor, shading: THREE.FlatShading, side: THREE.DoubleSide});        
+
         var paddleComputerColor = new THREE.Color(_gameOptions.paddleComputerColor);
-        var paddleHumanMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: paddleHumanColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
         var paddleComputerMaterial = new THREE.MeshLambertMaterial({transparent: true, opacity: 0.4, color: paddleComputerColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
 
         _gameObjects.humanPaddle = new THREE.Mesh(paddleGeometry, paddleHumanMaterial);
@@ -266,12 +212,22 @@ matrixresort.pong = (function($) {
         _threejs.scene.add(_gameObjects.humanPaddle);
         _threejs.scene.add(_gameObjects.computerPaddle);  
 
-        _gameObjects.humanPaddle.position.set(0, 0, (_gameOptions.fieldLength + _gameOptions.paddleThickness)/2);
-        _gameObjects.computerPaddle.position.set(0, 0, -(_gameOptions.fieldLength + _gameOptions.paddleThickness)/2);  
+        // place the human paddle half of the 'field length' in front of the 'z = 0' plane
+        var paddleHumanPositionZ = _gameOptions.fieldLength/2 + _gameOptions.paddleThickness/2;
+
+        _gameObjects.humanPaddle.position.set(0, 0, paddleHumanPositionZ);
+        _gameObjects.computerPaddle.position.set(0, 0, -paddleHumanPositionZ);  
     },  
 
     _fnCreateScoreBoard = function() {
+        // create Object3D to represent the entire scoreboard
         _gameObjects.scoreBoard.root = new THREE.Object3D(); 
+
+        _threejs.scene.add(_gameObjects.scoreBoard.root);
+
+        // place scoreboard above the 3D field
+        // use 'y = 144' by default or if the fieldHeight is too large calculate a reasonable value
+        _gameObjects.scoreBoard.root.position.setY(Math.max(144, _gameOptions.fieldHeight/2 + _gameOptions.planeThickness + 24));        
 
         var paddleHumanColor = new THREE.Color(_gameOptions.paddleHumanColor);
         var paddleComputerColor = new THREE.Color(_gameOptions.paddleComputerColor);
@@ -280,20 +236,22 @@ matrixresort.pong = (function($) {
         var scoreDivider = _fnCreateScoreBoardPiece(" : ", new THREE.Color("white"), 0);  
         var scoreComputer = _fnCreateScoreBoardPiece(_gameObjects.scoreBoard.computerScore, paddleComputerColor, 64); 
 
+        // create the updateScore function on _gameObjects.scoreBoard object
+        // the function updates backing score properties and re-render the entire scoreboard
+        _gameObjects.scoreBoard.updateScore = function()  {         
+            _threejs.scene.remove(_gameObjects.scoreBoard.root);
+            _fnCreateScoreBoard();
+        };
 
-        _gameObjects.scoreBoard.updateScore = function(isHumanPaddle)  {
+        _gameObjects.scoreBoard.incrementScore = function(isHumanPaddle)  {
             if(isHumanPaddle) {
                 _gameObjects.scoreBoard.computerScore += 1;
             } else {
                 _gameObjects.scoreBoard.humanScore += 1;
             }
 
-            _threejs.scene.remove(_gameObjects.scoreBoard.root);
-            _fnCreateScoreBoard();
-        };
-
-        _threejs.scene.add(_gameObjects.scoreBoard.root);
-        _gameObjects.scoreBoard.root.position.setY(144);
+            _gameObjects.scoreBoard.updateScore();
+        };        
     }, 
 
     _fnCreateScoreBoardPiece = function(text, color, translateX) {
@@ -307,11 +265,200 @@ matrixresort.pong = (function($) {
 
             var scorePiece = new THREE.Mesh(scorePieceGeometry, scorePieceMaterial);
 
+            // move scorePiece to the right or left of the scoreboard center
             scorePiece.translateX(translateX);
-
-            setTimeout(function(){_gameObjects.scoreBoard.root.add(scorePiece)});           
+            _gameObjects.scoreBoard.root.add(scorePiece);
         });  
-    },    
+    },  
+
+    _fnCreateBall = function() {
+        var ballGeometry = new THREE.SphereGeometry(_gameOptions.ballRadius, 32, 32);  
+        var ballColor = new THREE.Color(_gameOptions.ballColor);
+        var ballMaterial = new THREE.MeshLambertMaterial({transparent: false, color: ballColor, shading: THREE.FlatShading, side: THREE.DoubleSide});
+
+        _gameObjects.ball = new THREE.Mesh(ballGeometry, ballMaterial);
+
+        _threejs.scene.add(_gameObjects.ball);    
+
+        // pladce the ball in the middle of the field
+        _gameObjects.ball.position.setX(0);
+        _gameObjects.ball.position.setY(0);
+        _gameObjects.ball.position.setZ(0);
+
+        // make the ball cast shadow
+        _gameObjects.ball.castShadow = true;
+    },
+
+//  done with all the _fnCreateXXXXXX methods
+/************************************************************************************************/
+
+
+    
+    _fnCreateLights = function() {
+        // crete a directional light to support shading
+        var light1 = new THREE.DirectionalLight(0xFFFFFF, 1, 1000 );
+        light1.position.set(0, 250, 300);
+        light1.castShadow = true;
+
+        //set parameters for shadow camera
+        light1.shadow.camera.near = 100;
+        light1.shadow.camera.far = 1000;
+        light1.shadow.camera.left = -250;
+        light1.shadow.camera.right = 250;
+        light1.shadow.camera.top = 250;
+        light1.shadow.camera.bottom = -250;   
+
+        _threejs.scene.add(light1);     
+
+        var ambientLight = new THREE.AmbientLight(0x222222);
+        _threejs.scene.add(ambientLight);    
+    },   
+
+    // init the dat.GUI control 
+    _fnInitDatGUI = function() {
+        var gui = new dat.GUI({width: 500});
+
+        // do not attach to any onChange handler as this is read-only text for game instructions
+        gui.add(_gameOptions, 'gameInstructions').name('Game instructions:');
+
+
+        // ball parameters
+        var ballFolder = gui.addFolder('Parameters of the ball');
+
+        var ballColor = ballFolder.addColor(_controlOptions, 'ballColor').name('Color of the ball');
+        ballColor.onChange(function(value) {_controlOptions.ballColor = value;}); 
+
+        var ballRadius = ballFolder.add(_controlOptions, 'ballRadius', 1, 16).name('Radius of the ball').step(0.1);
+        ballRadius.onChange(function(value) {_controlOptions.ballRadius = value;});   
+
+        var ballSpeed = ballFolder.add(_controlOptions, 'ballSpeed', 15, 150).name('Speed of the ball');
+        ballSpeed.onChange(function(value) {_controlOptions.ballSpeed = value;}); 
+
+
+        // field parameters
+        var fieldFolder = gui.addFolder('Parameters of the field');        
+
+        var fieldColor = fieldFolder.addColor(_controlOptions, 'fieldColor').name('Color of the field');
+        fieldColor.onChange(function(value) {_controlOptions.fieldColor = value;});
+
+        var fieldLength = fieldFolder.add(_controlOptions, 'fieldLength', 100, 600).name('Length of the field');
+        fieldLength.onChange(function(value) {_controlOptions.fieldLength = value;}); 
+
+        var fieldWidth = fieldFolder.add(_controlOptions, 'fieldWidth', 100, 600).name('Width of the field');
+        fieldWidth.onChange(function(value) {_controlOptions.fieldWidth = value;});  
+
+        var fieldHeight = fieldFolder.add(_controlOptions, 'fieldHeight', 100, 600).name('Height of the field');
+        fieldHeight.onChange(function(value) {_controlOptions.fieldHeight = value;});  
+
+        var planeThickness = fieldFolder.add(_controlOptions, 'planeThickness', 0.1, 10).name('Thickness of the top/bottom planes').step(0.1);
+        planeThickness.onChange(function(value) {_controlOptions.planeThickness = value;}); 
+
+        var wallColor = fieldFolder.addColor(_controlOptions, 'wallColor').name('Color of the walls');
+        wallColor.onChange(function(value) {_controlOptions.wallColor = value;});
+
+        var wallThickness = fieldFolder.add(_controlOptions, 'wallThickness', 0.1, 10).name('Thickness of the walls').step(0.1);
+        wallThickness.onChange(function(value) {_controlOptions.wallThickness = value;}); 
+ 
+
+        // paddle parameters
+        var paddleFolder = gui.addFolder('Parameters of the paddles');  
+
+        var paddleHumanColor = paddleFolder.addColor(_controlOptions, 'paddleHumanColor').name('Color of the human paddle');
+        paddleHumanColor.onChange(function(value) {_controlOptions.paddleHumanColor = value;});
+
+        var paddleComputerColor = paddleFolder.addColor(_controlOptions, 'paddleComputerColor').name('Color of the computer paddle');
+        paddleComputerColor.onChange(function(value) {_controlOptions.paddleComputerColor = value;});        
+
+        var paddleWidth = paddleFolder.add(_controlOptions, 'paddleWidth', 20, 160).name('Width of the paddle');
+        paddleWidth.onChange(function(value) {_controlOptions.paddleWidth = value;}); 
+
+        var paddleHeight = paddleFolder.add(_controlOptions, 'paddleHeight', 10, 100).name('Height of the paddle');
+        paddleHeight.onChange(function(value) {_controlOptions.paddleHeight = value;}); 
+
+        var paddleThickness = paddleFolder.add(_controlOptions, 'paddleThickness', 1, 12).name('Thickness of the paddle');
+        paddleThickness.onChange(function(value) {_controlOptions.paddleThickness = value;});  
+
+        var paddleComputerMaxSpeed = paddleFolder.add(_controlOptions, 'paddleComputerMaxSpeed', 10, 50).name('Speed limit of the computer paddle');
+        paddleComputerMaxSpeed.onChange(function(value) {_controlOptions.paddleComputerMaxSpeed = value;});     
+
+        var paddleHumanSpeed = paddleFolder.add(_controlOptions, 'paddleHumanSpeed', 1, 16).name('Speed of the human paddle').step(0.1);
+        paddleHumanSpeed.onChange(function(value) {_controlOptions.paddleHumanSpeed = value;});  
+ 
+        // apply the specified settings   
+        gui.add(matrixresort.pong, 'updateSettings').name('Update settings');
+
+        // reset score (but keep the current settings)
+        gui.add(matrixresort.pong, 'resetScore').name('Reset score');        
+    },      
+
+    fnUpdateSettings = function(){
+        // populate actual _gameOptions from the options stored in _controlOptions (set by dat.GUI)
+        $.extend(_gameOptions, _controlOptions);
+
+        // reset all the runtime game parameters
+        _fnResetGame();    
+
+        // recreate scene using new _gameOptions
+        _fnClearScene();
+        _fnCreateScene();
+    },  
+
+    fnResetScore = function() {
+        if(_gameObjects != null && _threejs.scene != null) {
+            // reset all the runtime game parameters
+            _fnResetGame();
+        }
+
+        _gameObjects.scoreBoard.updateScore();
+    },
+
+    //reset all the runtime parameters
+   _fnResetGame = function() {
+        _gameObjects.scoreBoard.humanScore = 0;
+        _gameObjects.scoreBoard.computerScore = 0;
+
+        // set _runtime to contain default values from _startRuntime
+        _runtime = $.extend({}, _startRuntime); 
+    },
+    
+    _fnAddToDOM = function() {
+        var container = document.getElementById(_gameCanvasElementID);
+        var canvas = container.getElementsByTagName('canvas');
+        if (canvas.length>0) {
+            container.removeChild(canvas[0]);
+        }
+
+        container.appendChild(_threejs.renderer.domElement);
+
+        // finding the first line in dat.GUI menu and replacing its content with div containing game instructions
+        var menuGameInstructions = $("div.dg.main.a li.cr.string:first-child");
+        menuGameInstructions.css("height", "64px");
+        var gameInstructionsInput = menuGameInstructions.find("div.c input[type='text']");
+        gameInstructionsInput.replaceWith($("<div style='color:#2FA1D6'>" + gameInstructionsInput.val() + "</div>"));
+    },
+
+    _fnRender = function() {
+        var delta = _threejs.clock.getDelta();
+        _threejs.cameraControls.update(delta);
+        _threejs.renderer.render(_threejs.scene, _threejs.camera);
+
+        if (_runtime.deltaSinceLastScoreChange == -1) {
+            _fnHumanPaddleMove();
+            _fnComputerPaddleMove(delta);            
+            _fnBallMove(delta);       
+        } else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+            _runtime.deltaSinceLastScoreChange = -1;
+            _fnContinueGame();
+        } else {
+            _runtime.deltaSinceLastScoreChange += delta;               
+            _fnBallJump();         
+        }
+
+        if(_runtime.deltaSinceLastIntercept >= 0) {
+            _runtime.deltaSinceLastIntercept += delta;              
+            _fnPaddleWobble();            
+        }  
+    },        
 
     _fnHumanPaddleMove = function() {
         var paddleRotationLimitAngle = 5*Math.PI/12;
@@ -495,7 +642,7 @@ matrixresort.pong = (function($) {
                 // }         
             } else if(Math.abs(_gameObjects.ball.position.z) > _gameOptions.fieldWidth/2) {
                 _runtime.deltaSinceLastScoreChange = 0;
-                _gameObjects.scoreBoard.updateScore(isHumanPaddle);
+                _gameObjects.scoreBoard.incrementScore(isHumanPaddle);
 
                 _runtime.isHumanLastScored = !isHumanPaddle;
 
@@ -707,75 +854,6 @@ matrixresort.pong = (function($) {
         _runtime.ballSpeedComponents.z = _runtime.ballSpeedComponents.x * directionTangentXZ;
     },
 
-    _fnInitGui = function() {
-        var gui = new dat.GUI({width: 500});
-
-        gui.add(_gameOptions, 'gameInstructions').name('Game instructions:');
-  
-        var ballFolder = gui.addFolder('Parameters of the ball');
-
-        var ballColor = ballFolder.addColor(_controlOptions, 'ballColor').name('Color of the ball');
-        ballColor.onChange(function(value) {_controlOptions.ballColor = value;}); 
-
-        var ballRadius = ballFolder.add(_controlOptions, 'ballRadius', 1, 16).name('Radius of the ball').step(0.1);
-        ballRadius.onChange(function(value) {_controlOptions.ballRadius = value;});   
-
-        var ballSpeed = ballFolder.add(_controlOptions, 'ballSpeed', 15, 150).name('Speed of the ball');
-        ballSpeed.onChange(function(value) {_controlOptions.ballSpeed = value;}); 
-
-
-        var fieldFolder = gui.addFolder('Parameters of the field');        
-
-        var fieldColor = fieldFolder.addColor(_controlOptions, 'fieldColor').name('Color of the field');
-        fieldColor.onChange(function(value) {_controlOptions.fieldColor = value;});
-
-        var fieldLength = fieldFolder.add(_controlOptions, 'fieldLength', 100, 600).name('Length of the field');
-        fieldLength.onChange(function(value) {_controlOptions.fieldLength = value;}); 
-
-        var fieldWidth = fieldFolder.add(_controlOptions, 'fieldWidth', 100, 600).name('Width of the field');
-        fieldWidth.onChange(function(value) {_controlOptions.fieldWidth = value;});  
-
-        var fieldHeight = fieldFolder.add(_controlOptions, 'fieldHeight', 100, 600).name('Height of the field');
-        fieldHeight.onChange(function(value) {_controlOptions.fieldHeight = value;});  
-
-        var planeThickness = fieldFolder.add(_controlOptions, 'planeThickness', 0.1, 10).name('Thickness of the top/bottom planes').step(0.1);
-        planeThickness.onChange(function(value) {_controlOptions.planeThickness = value;}); 
-
-        var wallColor = fieldFolder.addColor(_controlOptions, 'wallColor').name('Color of the walls');
-        wallColor.onChange(function(value) {_controlOptions.wallColor = value;});
-
-        var wallThickness = fieldFolder.add(_controlOptions, 'wallThickness', 0.1, 10).name('Thickness of the walls').step(0.1);
-        wallThickness.onChange(function(value) {_controlOptions.wallThickness = value;}); 
- 
-
-        var paddleFolder = gui.addFolder('Parameters of the paddles');  
-
-        var paddleHumanColor = paddleFolder.addColor(_controlOptions, 'paddleHumanColor').name('Color of the human paddle');
-        paddleHumanColor.onChange(function(value) {_controlOptions.paddleHumanColor = value;});
-
-        var paddleComputerColor = paddleFolder.addColor(_controlOptions, 'paddleComputerColor').name('Color of the computer paddle');
-        paddleComputerColor.onChange(function(value) {_controlOptions.paddleComputerColor = value;});        
-
-        var paddleWidth = paddleFolder.add(_controlOptions, 'paddleWidth', 20, 160).name('Width of the paddle');
-        paddleWidth.onChange(function(value) {_controlOptions.paddleWidth = value;}); 
-
-        var paddleHeight = paddleFolder.add(_controlOptions, 'paddleHeight', 10, 100).name('Height of the paddle');
-        paddleHeight.onChange(function(value) {_controlOptions.paddleHeight = value;}); 
-
-        var paddleThickness = paddleFolder.add(_controlOptions, 'paddleThickness', 1, 12).name('Thickness of the paddle');
-        paddleThickness.onChange(function(value) {_controlOptions.paddleThickness = value;});  
-
-        var paddleComputerMaxSpeed = paddleFolder.add(_controlOptions, 'paddleComputerMaxSpeed', 10, 50).name('Speed limit of the computer paddle');
-        paddleComputerMaxSpeed.onChange(function(value) {_controlOptions.paddleComputerMaxSpeed = value;});     
-
-        var paddleHumanSpeed = paddleFolder.add(_controlOptions, 'paddleHumanSpeed', 1, 16).name('Speed of the human paddle').step(0.1);
-        paddleHumanSpeed.onChange(function(value) {_controlOptions.paddleHumanSpeed = value;});  
-    
-        gui.add(matrixresort.pong, 'updateSettings').name('Update settings');
-        gui.add(matrixresort.pong, 'resetSettings').name('Reset settings to defaults');
-        gui.add(matrixresort.pong, 'resetScore').name('Reset score');        
-    },  
-
     _setKeyboard = function() {
         $(document).keydown(function (e) {
                 var preventEventPropogation = true;
@@ -855,55 +933,6 @@ matrixresort.pong = (function($) {
         });      
     },
 
-    _fnClearScene = function() {
-        _threejs.scene.remove(_gameObjects.bottomPlane);
-        _threejs.scene.remove(_gameObjects.topPlane);        
-        _threejs.scene.remove(_gameObjects.ball);
-        _threejs.scene.remove(_gameObjects.lineZ);   
-        _threejs.scene.remove(_gameObjects.lineX);     
-        _threejs.scene.remove(_gameObjects.humanPaddle);  
-        _threejs.scene.remove(_gameObjects.computerPaddle); 
-        _threejs.scene.remove(_gameObjects.scoreBoard.root); 
-        _threejs.scene.remove(_gameObjects.leftWall); 
-        _threejs.scene.remove(_gameObjects.rightWall); 
-    },
-
-    _fnResetGame = function() {
-        _fnClearScene();
-
-        _gameObjects.scoreBoard.humanScore = 0;
-        _gameObjects.scoreBoard.computerScore = 0;
-
-        _runtime.keysPressed = {left: false, right: false, up: false, down: false};
-        _runtime.ballSpeedComponents = null;
-        _runtime.deltaSinceLastScoreChange = 0;
-        _runtime.deltaSinceLastIntercept = -1;        
-        _runtime.isHumanLastScored = null;     
-    },
-
-    _fnRender = function() {
-        var delta = _threejs.clock.getDelta();
-        _threejs.cameraControls.update(delta);
-        _threejs.renderer.render(_threejs.scene, _threejs.camera);
-
-        if (_runtime.deltaSinceLastScoreChange == -1) {
-            _fnHumanPaddleMove();
-            _fnComputerPaddleMove(delta);            
-            _fnBallMove(delta);       
-        } else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
-            _runtime.deltaSinceLastScoreChange = -1;
-            _fnContinueGame();
-        } else {
-            _runtime.deltaSinceLastScoreChange += delta;               
-            _fnBallJump();         
-        }
-
-        if(_runtime.deltaSinceLastIntercept >= 0) {
-            _runtime.deltaSinceLastIntercept += delta;              
-            _fnPaddleWobble();            
-        }  
-    },
-
     _fnAnimate = function() {
         window.requestAnimationFrame(_fnAnimate);
         _fnRender();
@@ -912,7 +941,6 @@ matrixresort.pong = (function($) {
     return {
         init: fnInit,
         updateSettings: fnUpdateSettings,
-        resetSettings: fnResetSettings,
         resetScore: fnResetScore        
     };       
 
