@@ -434,13 +434,19 @@ matrixresort.pong = (function($) {
         var menuGameInstructions = $("div.dg.main.a li.cr.string:first-child");
         menuGameInstructions.attr("id", "gameInfo");
         var gameInstructionsInput = menuGameInstructions.find("div.c input[type='text']");
-        gameInstructionsInput.replaceWith($("<div style='color:#2FA1D6'>" + gameInstructionsInput.val() + "</div>"));
+        gameInstructionsInput.replaceWith($("<div style='color:#2FA1D6;'>" + gameInstructionsInput.val() + "</div>"));
+
+        // injecting new styles to render the wider than normal menu stripe to fit potentially verbose game instructions 
+        // and to handle collapsing of this stripe correctly by dat.GUI
+        $("<style>").prop("type", "text/css").html("\
+            .dg li#gameInfo{cursor:auto;height:81px;line-height:27px;overflow:hidden;padding:0 4px 0 5px}\
+            .dg .closed li#gameInfo {height:0;overflow:hidden;border:0}\
+            ").appendTo("head");        
     },
 
     _fnRender = function() {
         var delta = _threejs.clock.getDelta();
         _threejs.cameraControls.update(delta);
-        _threejs.renderer.render(_threejs.scene, _threejs.camera);
 
         if (_runtime.deltaSinceLastScoreChange == -1) {
             _fnHumanPaddleMove();
@@ -458,6 +464,8 @@ matrixresort.pong = (function($) {
             _runtime.deltaSinceLastIntercept += delta;              
             _fnPaddleWobble();            
         }  
+
+        _threejs.renderer.render(_threejs.scene, _threejs.camera);        
     },        
 
     _fnHumanPaddleMove = function() {
