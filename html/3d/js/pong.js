@@ -432,7 +432,7 @@ matrixresort.pong = (function($) {
 
         // finding the first line in dat.GUI menu and replacing its content with div containing game instructions
         var menuGameInstructions = $("div.dg.main.a li.cr.string:first-child");
-        menuGameInstructions.css("height", "64px");
+        menuGameInstructions.attr("id", "gameInfo");
         var gameInstructionsInput = menuGameInstructions.find("div.c input[type='text']");
         gameInstructionsInput.replaceWith($("<div style='color:#2FA1D6'>" + gameInstructionsInput.val() + "</div>"));
     },
