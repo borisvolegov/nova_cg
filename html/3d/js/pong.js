@@ -69,6 +69,11 @@ matrixresort.pong = (function($) {
         "isHumanLastIntercepted": null
     },  // object to contain the parameters that change at runtime 
     _runtime = null, 
+    _interceptStatuses = {
+        "MISSED": -1,
+        "NOT_YET_KNOWN": 0,
+        "INTERCEPTED": 1
+    }, // enumeration to reresent the result of interception
 
     /*  fnInit function takes two arguments 
         gameCanvasElementID: DOM elementID of game container DIV
@@ -448,14 +453,19 @@ matrixresort.pong = (function($) {
         var delta = _threejs.clock.getDelta();
         _threejs.cameraControls.update(delta);
 
-        if (_runtime.deltaSinceLastScoreChange == -1) {
+        if (_runtime.deltaSinceLastScoreChange == -1) // normal game mode
+        { 
             _fnHumanPaddleMove();
             _fnComputerPaddleMove(delta);            
             _fnBallMove(delta);       
-        } else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) {
+        } 
+        else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) // if enough time passed since the last score chage transition to normal mode
+        {
             _runtime.deltaSinceLastScoreChange = -1;
             _fnContinueGame();
-        } else {
+        } 
+        else // in case of recent score change do something special
+        {
             _runtime.deltaSinceLastScoreChange += delta;               
             _fnBallJump();         
         }
@@ -470,11 +480,12 @@ matrixresort.pong = (function($) {
 
     _fnHumanPaddleMove = function() {
         var paddleRotationLimitAngle = 5*Math.PI/12;
-        var paddleRotationAngleIncrement = Math.PI/12;
+        var paddleRotationAngleIncrement = Math.PI/24;
 
         var humanPaddle = _gameObjects.humanPaddle;
-        var limits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y);
+        var limits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y);
 
+        // do appropriate action depending of which key is pressed. do not go beyond limits
         if(_runtime.keysPressed.left)  {
             humanPaddle.position.setX(humanPaddle.position.x-_gameOptions.paddleHumanSpeed);
             if(humanPaddle.position.x < -limits.xDirection) {
@@ -496,20 +507,25 @@ matrixresort.pong = (function($) {
                 humanPaddle.position.setY(-limits.yDirection);
             }               
         } else if(_runtime.keysPressed.rotateAroundYForward) {  
-            var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
+            // recalculate limits as prjection of the paddle on x-axis has changed due to rotation
+            var newLimits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y + paddleRotationAngleIncrement); 
+            // as projection of the paddle on x-axis may increase due to rotation we need to check if the paddle still within limits 
+            // (in cases when the paddle is not far from a wall already)
+            // also check that rotation angle stays within limits (specified by paddleRotationLimitAngle variable in the top of the function)
             if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y + paddleRotationAngleIncrement <= paddleRotationLimitAngle) {
                 humanPaddle.rotation.y += paddleRotationAngleIncrement;
             }
         } else if(_runtime.keysPressed.rotateAroundYBackward) {
-            var newLimits  = _fnGetMaxPaddleDistanceFromCenter(humanPaddle.rotation.y + Math.PI/12); 
+            // see comment for _runtime.keysPressed.rotateAroundYForward. The same logic applies here
+            var newLimits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y + paddleRotationAngleIncrement); 
             if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y - paddleRotationAngleIncrement >= -paddleRotationLimitAngle) {
                 humanPaddle.rotation.y -= paddleRotationAngleIncrement;
             }         
         }        
-    }, 
+    },   
 
     _fnComputerPaddleMove = function(delta) {
-        var limits = _fnGetMaxPaddleDistanceFromCenter(0);
+        var limits = _fnGetPaddlePositionLimits(0);
 
         // shift in the direction of the ball
         var shiftX = _gameObjects.ball.position.x - _gameObjects.computerPaddle.position.x;
@@ -520,90 +536,69 @@ matrixresort.pong = (function($) {
 
         var paddleComputerMaxAllowedShift = _gameOptions.paddleComputerMaxSpeed * delta;
 
-    // restrict the speed of computer to give the human chance to win
-        // shift required to get to ball current location
-        var ballLocationShift = Math.sqrt(Math.pow(shiftX,2) + Math.pow(shiftY,2));        
-        if(ballLocationShift > paddleComputerMaxAllowedShift) {
-            // if there is no X component, paddle moves only in Y direction
-            if (shiftX == 0) {
+        // restrict the speed of computer to give the human chance to win
+        var ballLocationShift = Math.sqrt(Math.pow(shiftX,2) + Math.pow(shiftY,2)); // shift required to get to ball current location   
+
+        // scale shift
+        if(ballLocationShift > paddleComputerMaxAllowedShift) {            
+            if (shiftX == 0) // if there is no X component, paddle moves only in Y direction
+            {
                 shiftY = paddleComputerMaxAllowedShift;
-            // if there is no Y component, paddle moves only in X direction                
-            } else if (shiftY == 0) {
-                shiftX = _gameOptions.paddleComputerMaxSpeed;
-            // given total speed value, calculate its X and Y components.                                   
-            } else {
-                var ratio = Math.abs(shiftX / shiftY);
-                var shiftYAbs = _gameOptions.paddleComputerMaxSpeed * delta / Math.sqrt(Math.pow(ratio, 2) + 1);
-                shiftX = (ratio * shiftYAbs) * directionX;
+                           
+            } 
+            else if (shiftY == 0) // if there is no Y component, paddle moves only in X direction 
+            {
+                shiftX = paddleComputerMaxAllowedShift;                                      
+            } 
+            else // given total speed value, calculate its X and Y components.  
+            {
+                var tangent = Math.abs(shiftX / shiftY);
+                var angle = Math.atan(tangent);            
+
+                var shiftYAbs = paddleComputerMaxAllowedShift * Math.cos(angle);
+                shiftX = (tangent * shiftYAbs) * directionX;
                 shiftY = shiftYAbs * directionY;
             }
         }
 
-        // make sure that paddle stays on the field
-        if(_gameObjects.computerPaddle.position.x + shiftX > -limits.xDirection  && _gameObjects.computerPaddle.position.x + shiftX < limits.xDirection) {      
-            _gameObjects.computerPaddle.position.x += shiftX;
+        // move paddle but make sure that it stays on the field
+        _gameObjects.computerPaddle.position.x += shiftX;        
+        if(_gameObjects.computerPaddle.position.x < -limits.xDirection) {
+            _gameObjects.computerPaddle.position.x = -limits.xDirection;
+        } else if (_gameObjects.computerPaddle.position.x > limits.xDirection) { 
+            _gameObjects.computerPaddle.position.x = limits.xDirection;            
+        } 
+
+        // move paddle but make sure that it stays on the field
+        _gameObjects.computerPaddle.position.y += shiftY;        
+        if(_gameObjects.computerPaddle.position.y < -limits.yDirection) {
+            _gameObjects.computerPaddle.position.y = -limits.yDirection;
+        } 
+        if(_gameObjects.computerPaddle.position.y > limits.yDirection) {      
+            _gameObjects.computerPaddle.position.y = limits.yDirection;
         }
-
-        if(_gameObjects.computerPaddle.position.y + shiftY > -limits.yDirection  && _gameObjects.computerPaddle.position.y + shiftY < limits.yDirection) {      
-            _gameObjects.computerPaddle.position.y += shiftY;
-        }
-    },    
-
-    // calculate how far the center of the paddle is allowed to shift in x-direction
-    _fnGetMaxPaddleDistanceFromCenter = function(rotationAngle) {
-        var paddleWidthAdjustedForRotation = _gameOptions.paddleWidth;
-
-        if(rotationAngle !== 0) {
-            paddleWidthAdjustedForRotation = _gameOptions.paddleWidth * Math.abs(Math.cos(rotationAngle)) + _gameOptions.paddleThickness * Math.abs(Math.sin(rotationAngle));
-        }
-
-        return {
-            "xDirection": (_gameOptions.fieldWidth - paddleWidthAdjustedForRotation)/2,
-            "yDirection": (_gameOptions.fieldHeight - _gameOptions.paddleHeight)/2
-        };
-    },
-
-    _fnGetMaxBallDistanceFromCenter = function() {
-        return {
-            "xDirection": _gameOptions.fieldWidth/2 - _gameOptions.ballRadius,
-            "yDirection": _gameOptions.fieldHeight/2 - _gameOptions.ballRadius
-        };
     },   
 
-    _fnPaddleWobble  = function() {
-        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
-        var timeToWobble = 1;
+     // calculate how far the center of the paddle is allowed to shift in x and y direction 
+    _fnGetPaddlePositionLimits = function(rotationAngle) {
+        var paddleProjectionOnX = _gameOptions.paddleWidth;
 
-        var unscaledOffset = 0;
-        if(_runtime.deltaSinceLastIntercept > timeToWobble) {
-            unscaledOffset = 0;
-            _runtime.deltaSinceLastIntercept = -1;
-        } else {
-            unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
+        // in case paddle is rotated, the projection on x-axis will be different from _gameOptions.paddleWidth; 
+        // the width component of the paddle will be decreased to be: _gameOptions.paddleWidth * Math.abs(Math.cos(rotationAngle))
+        // the thickness component is normally 0 as it's perpendicular to the x-axis 
+        // but if the paddle is rotated it contributes slightly as: _gameOptions.paddleThickness * Math.abs(Math.sin(rotationAngle))
+        if(rotationAngle !== 0) {            
+            paddleProjectionOnX = _gameOptions.paddleWidth * Math.abs(Math.cos(rotationAngle)) + _gameOptions.paddleThickness * Math.abs(Math.sin(rotationAngle));
         }
 
-        var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
-        var newZ = ((_gameOptions.fieldLength + _gameOptions.paddleThickness)/2 + 32 * unscaledOffset) * wobbleDirection;
-
-        paddle.position.setZ(newZ);
-    },
-
-    _fnGetLogInfo = function(wasIntercepted) {
-        var logInfo = wasIntercepted ? "Intercepted!\n" : "Missed\n";
-        logInfo+= "ball position: [x: " + _gameObjects.ball.position.x + "]" + ", [y: " + _gameObjects.ball.position.y + "]" + ", [z: " + _gameObjects.ball.position.z + "]\n";
-        var transformedBallPosition = _fnConvertCoordinatesY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
-        logInfo += "ball transformed position: [x: " + transformedBallPosition.x + "]" + ", [y: " + transformedBallPosition.y + "]" + ", [z: " + transformedBallPosition.z + "]\n";
-        logInfo += "paddle center position: [x: " + _gameObjects.humanPaddle.position.x + "]" + ", [y: " + _gameObjects.humanPaddle.position.y + "]" + ", [z: " + (_gameObjects.humanPaddle.position.z+_gameOptions.paddleThickness) + "]\n";                  
-        var transformedPaddlePosition = _fnConvertCoordinatesY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameObjects.humanPaddle.position.z - _gameOptions.paddleThickness/2), _gameObjects.humanPaddle.rotation.y);
-        logInfo += "paddle center transformed position: [x: " + transformedPaddlePosition.x + "]" + ", [y: " + transformedPaddlePosition.y + "]" + ", [z: " + transformedPaddlePosition.z + "]\n";  
-        logInfo += "paddle rotation angle: " + _gameObjects.humanPaddle.rotation.y;
-
-        return logInfo;
-    },
-
+        return {
+            "xDirection": _gameOptions.fieldWidth/2 - paddleProjectionOnX/2,
+            "yDirection": _gameOptions.fieldHeight/2 - _gameOptions.paddleHeight/2
+        };
+    },  
 
     _fnBallMove = function(delta) {
-        var limits = _fnGetMaxBallDistanceFromCenter();
+        var limits = _fnGetBallPositionLimits();
 
         var paddleToInterceptBall = _fnPaddleToInterceptBall();
 
@@ -621,11 +616,11 @@ matrixresort.pong = (function($) {
 
                 if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
                     var logInfo = "speed: [x: " + _runtime.ballSpeedComponents.x + "], [y: " + _runtime.ballSpeedComponents.y + "], [z: " + _runtime.ballSpeedComponents.z + "]\n";
-                    var ballSpeedVectorTranslated = _fnConvertCoordinatesY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);
+                    var ballSpeedVectorTranslated = _fnRotateCoordinatesAroundY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);
                     logInfo += "translated current speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                    
                     ballSpeedVectorTranslated.z = -ballSpeedVectorTranslated.z;
                     logInfo += "translated bounced speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                      
-                    var ballSpeedComponentsAfterBouncing = _fnConvertCoordinatesY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
+                    var ballSpeedComponentsAfterBouncing = _fnRotateCoordinatesAroundY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
                     logInfo += "bounced speed: [x: " + ballSpeedComponentsAfterBouncing.x + "], [y: " + ballSpeedComponentsAfterBouncing.y + "], [z: " + ballSpeedComponentsAfterBouncing.z + "]\n";                                        
 
                     console.log(logInfo);
@@ -693,6 +688,115 @@ matrixresort.pong = (function($) {
 
         // _gameObjects.lineX.position.setZ(_gameObjects.ball.position.z); 
         // _gameObjects.lineX.position.setY(_gameObjects.ball.position.y);  
+    },  
+
+    _fnGetBallPositionLimits = function() {
+        return {
+            "xDirection": _gameOptions.fieldWidth/2 - _gameOptions.ballRadius,
+            "yDirection": _gameOptions.fieldHeight/2 - _gameOptions.ballRadius
+        };
+    },      
+
+    // the function identifies if there is an interception situation
+    _fnWasIntercepted = function() {
+        // checks if the ball is not close enough to the paddle yet. 
+        // the earliest a paddle can reach the ball is when the paddle is rotated all the way towards the center of the field
+        // there is no need to check for interception situation before then
+        if(Math.abs(_gameObjects.ball.position.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
+            return _interceptStatuses.NOT_YET_KNOWN;
+        }
+
+        // checks if the ball has already passed the paddle and is beyond paddle reach. 
+        // In this case we can be absolutely sure that the ball hasn't been intercepted by paddle
+        if(Math.abs(_gameObjects.ball.position.z) > _gameOptions.fieldLength/2 + _gameOptions.paddleWidth/2) {
+            return _interceptStatuses.MISSED;
+        }
+
+        // it is easier to detect if the ball crossed the plane of the rotated paddle when we rotate the coordinates in such way that the plane of the paddle has a constant Z*
+        // by default set the rotated coordinates to be our regular x-y-z coordinates (in case paddle is not rotated)
+        var rotatedBallCoordinates = _gameObjects.ball.position;
+        // in case plane is not rotated its plane will be located at '_gameOptions.fieldLength/2' distance along z-axis
+        var rotatedPaddlePlaneZ = _gameOptions.fieldLength/2;
+
+        // if ball is in human's part of the field (only human paddle can rotate) and human paddle is actually rotated
+        if(_gameObjects.ball.position.z > 0 && _gameObjects.humanPaddle.rotation.y != 0) {
+            rotatedBallCoordinates = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);  
+            // rotate the central point on paddle surface, every point on the paddle surface will have the same z* in new, rotated coordinates    
+            var centralPointOnPaddleSurface = new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2);        
+            paddlePlaneRotatedZ = _fnRotateCoordinatesAroundY(centralPointOnPaddleSurface, _gameObjects.humanPaddle.rotation.y).z;        
+        }
+
+        // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
+        if(Math.abs(rotatedBallCoordinates.z) >= Math.abs(paddlePlaneRotatedZ - _gameOptions.ballRadius)) {
+            return 
+            (
+                (
+                    newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2) &&
+                    newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2) 
+                    || 
+                    newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2 - _gameOptions.ballRadius) &&
+                    _gameObjects.ball.position.x + _gameOptions.fieldWidth/2 < _gameOptions.ballRadius 
+                    ||
+                    newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2 + _gameOptions.ballRadius) &&
+                    _gameOptions.fieldWidth/2 - _gameObjects.ball.position.x < _gameOptions.ballRadius               
+                )            
+                && 
+                (
+                    _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2) &&
+                    _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2) 
+                    ||
+                    _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2 - _gameOptions.ballRadius) &&
+                    _gameObjects.ball.position.y + _gameOptions.fieldHeight/2 < _gameOptions.ballRadius 
+                    ||
+                    _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2 + _gameOptions.ballRadius) &&
+                    _gameOptions.fieldHeight/2 - _gameObjects.ball.position.y < _gameOptions.ballRadius                
+                )
+            ) ? _interceptStatuses.INTERCEPTED : _interceptStatuses.MISSED;
+            // if(_gameObjects.ball.position.z > 0) {
+            //     console.log("Inside: _fnPaddleToInterceptBall" + _fnGetLogInfo(true));
+            // }
+            // return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        } else {
+            return null;
+        }
+    },   
+
+    _fnRotateCoordinatesAroundY = function(originalCoordinates, rotationAngleAroundY) {
+        var z = originalCoordinates.z * Math.cos(rotationAngleAroundY) + originalCoordinates.x * Math.sin(rotationAngleAroundY);
+        var x = originalCoordinates.x * Math.cos(rotationAngleAroundY) - originalCoordinates.z * Math.sin(rotationAngleAroundY);
+
+        return new THREE.Vector3(x, originalCoordinates.y, z);
+    },         
+    
+    _fnPaddleWobble  = function() {
+        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        var timeToWobble = 1;
+
+        var unscaledOffset = 0;
+        if(_runtime.deltaSinceLastIntercept > timeToWobble) {
+            unscaledOffset = 0;
+            _runtime.deltaSinceLastIntercept = -1;
+        } else {
+            unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
+        }
+
+        var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
+        var newZ = ((_gameOptions.fieldLength + _gameOptions.paddleThickness)/2 + 32 * unscaledOffset) * wobbleDirection;
+
+        paddle.position.setZ(newZ);
+    },
+
+    _fnGetLogInfo = function(wasIntercepted) {
+        var logInfo = wasIntercepted ? "Intercepted!\n" : "Missed\n";
+        logInfo+= "ball position: [x: " + _gameObjects.ball.position.x + "]" + ", [y: " + _gameObjects.ball.position.y + "]" + ", [z: " + _gameObjects.ball.position.z + "]\n";
+        var transformedBallPosition = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
+        logInfo += "ball transformed position: [x: " + transformedBallPosition.x + "]" + ", [y: " + transformedBallPosition.y + "]" + ", [z: " + transformedBallPosition.z + "]\n";
+        logInfo += "paddle center position: [x: " + _gameObjects.humanPaddle.position.x + "]" + ", [y: " + _gameObjects.humanPaddle.position.y + "]" + ", [z: " + (_gameObjects.humanPaddle.position.z+_gameOptions.paddleThickness) + "]\n";                  
+        var transformedPaddlePosition = _fnRotateCoordinatesAroundY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameObjects.humanPaddle.position.z - _gameOptions.paddleThickness/2), _gameObjects.humanPaddle.rotation.y);
+        logInfo += "paddle center transformed position: [x: " + transformedPaddlePosition.x + "]" + ", [y: " + transformedPaddlePosition.y + "]" + ", [z: " + transformedPaddlePosition.z + "]\n";  
+        logInfo += "paddle rotation angle: " + _gameObjects.humanPaddle.rotation.y;
+
+        return logInfo;
     },
 
     _fnBallBounceOffPaddle = function(distanceFromPaddleCenter) {
@@ -768,36 +872,6 @@ matrixresort.pong = (function($) {
         return paddle.position.z > 0;
     },
 
-    _fnPaddleToInterceptBall = function() {
-        if(Math.abs(_gameObjects.ball.position.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
-            return null;
-        }
-
-        if(Math.abs(_gameObjects.ball.position.z) > (_gameOptions.fieldLength + _gameOptions.paddleWidth)/2) {
-            return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
-        }
-
-        var newBallCoordinates = _gameObjects.ball.position;
-        var paddlePlaneRotatedZ = _gameOptions.fieldLength/2;
-
-        if(_gameObjects.ball.position.z > 0) {
-            if(_gameObjects.humanPaddle.rotation.y != 0) {
-                newBallCoordinates = _fnConvertCoordinatesY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);               
-                paddlePlaneRotatedZ = _fnConvertCoordinatesY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2), _gameObjects.humanPaddle.rotation.y).z;
-            }
-        }
-
-        // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
-        if(Math.abs(newBallCoordinates.z) >= Math.abs(paddlePlaneRotatedZ - _gameOptions.ballRadius)) {
-            if(_gameObjects.ball.position.z > 0) {
-                console.log("Inside: _fnPaddleToInterceptBall" + _fnGetLogInfo(true));
-            }
-            return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
-        } else {
-            return null;
-        }
-    },
-
     _fnIsBallIntercepted = function(paddle) {
         var newBallCoordinates = _gameObjects.ball.position;
         var newRotatedXOfPaddleCeneter = paddle.position.x;
@@ -809,9 +883,9 @@ matrixresort.pong = (function($) {
 
         if(_fnIsHumanPaddle(paddle)) {
             if(_gameObjects.humanPaddle.rotation.y != 0) {
-                newBallCoordinates = _fnConvertCoordinatesY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
-                paddlePlaneRotatedZ = _fnConvertCoordinatesY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2), _gameObjects.humanPaddle.rotation.y).z;
-                newRotatedXOfPaddleCeneter = _fnConvertCoordinatesY(_gameObjects.humanPaddle.position, _gameObjects.humanPaddle.rotation.y).x;
+                newBallCoordinates = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
+                paddlePlaneRotatedZ = _fnRotateCoordinatesAroundY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2), _gameObjects.humanPaddle.rotation.y).z;
+                newRotatedXOfPaddleCeneter = _fnRotateCoordinatesAroundY(_gameObjects.humanPaddle.position, _gameObjects.humanPaddle.rotation.y).x;
             }
         }        
 
@@ -839,13 +913,6 @@ matrixresort.pong = (function($) {
             )
         );
     },
-
-    _fnConvertCoordinatesY = function(originalCoordinates, rotationAngleAroundY) {
-        var z = originalCoordinates.z * Math.cos(rotationAngleAroundY) + originalCoordinates.x * Math.sin(rotationAngleAroundY);
-        var x = originalCoordinates.x * Math.cos(rotationAngleAroundY) - originalCoordinates.z * Math.sin(rotationAngleAroundY);
-
-        return new THREE.Vector3(x, originalCoordinates.y, z);
-    }, 
 
     // _fnGetRotatedZCoordinateOfHumanPaddleY = function() {
     //     var paddle = _gameObjects.humanPaddle;
