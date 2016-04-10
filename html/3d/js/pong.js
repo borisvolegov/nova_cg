@@ -467,10 +467,10 @@ matrixresort.pong = (function($) {
         else // in case of recent score change do something special
         {
             _runtime.deltaSinceLastScoreChange += delta;               
-            _fnBallJump();         
+            //_fnBallJump();         
         }
 
-        if(_runtime.deltaSinceLastIntercept >= 0) {
+        if(_runtime.deltaSinceLastIntercept >= 0) {     // do something 'interesting' for sometime after paddle has itercepted the ball
             _runtime.deltaSinceLastIntercept += delta;              
             _fnPaddleWobble();            
         }  
@@ -509,6 +509,7 @@ matrixresort.pong = (function($) {
         } else if(_runtime.keysPressed.rotateAroundYForward) {  
             // recalculate limits as prjection of the paddle on x-axis has changed due to rotation
             var newLimits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y + paddleRotationAngleIncrement); 
+            console.log("newLimits.directionX: " + newLimits.xDirection + "; newLimits.directionY: " + newLimits.yDirection);
             // as projection of the paddle on x-axis may increase due to rotation we need to check if the paddle still within limits 
             // (in cases when the paddle is not far from a wall already)
             // also check that rotation angle stays within limits (specified by paddleRotationLimitAngle variable in the top of the function)
@@ -517,7 +518,8 @@ matrixresort.pong = (function($) {
             }
         } else if(_runtime.keysPressed.rotateAroundYBackward) {
             // see comment for _runtime.keysPressed.rotateAroundYForward. The same logic applies here
-            var newLimits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y + paddleRotationAngleIncrement); 
+            var newLimits  = _fnGetPaddlePositionLimits(humanPaddle.rotation.y - paddleRotationAngleIncrement); 
+            console.log("newLimits.directionX: " + newLimits.xDirection + "; newLimits.directionY: " + newLimits.yDirection);
             if(humanPaddle.position.x >= -newLimits.xDirection && humanPaddle.position.x <= newLimits.xDirection && humanPaddle.rotation.y - paddleRotationAngleIncrement >= -paddleRotationLimitAngle) {
                 humanPaddle.rotation.y -= paddleRotationAngleIncrement;
             }         
@@ -592,7 +594,7 @@ matrixresort.pong = (function($) {
         }
 
         return {
-            "xDirection": _gameOptions.fieldWidth/2 - paddleProjectionOnX/2,
+            "xDirection": _gameOptions.fieldWidth/2 - paddleProjectionOnX/2,            
             "yDirection": _gameOptions.fieldHeight/2 - _gameOptions.paddleHeight/2
         };
     },  
@@ -600,63 +602,15 @@ matrixresort.pong = (function($) {
     _fnBallMove = function(delta) {
         var limits = _fnGetBallPositionLimits();
 
-        var paddleToInterceptBall = _fnPaddleToInterceptBall();
+        var interceptionStatus = _fnWasIntercepted(delta);
+        if(interceptionStatus === _interceptStatuses.INTERCEPTED) {
+            _fnBounceOffPaddle();
+        } else if(interceptionStatus === _interceptStatuses.MISSED) {
+            _runtime.deltaSinceLastScoreChange = 0;
+            _gameObjects.scoreBoard.incrementScore(isHumanPaddle);
 
-        // if it's the interception situation
-        if(paddleToInterceptBall != null) {
-            // check if the paddle actually intercepted the ball
-            var wasIntercepted = _fnIsBallIntercepted(paddleToInterceptBall);
-            var isHumanPaddle = _fnIsHumanPaddle(paddleToInterceptBall);  
-
-            // if the ball was intercepted
-            if(wasIntercepted) {  
-
-                _runtime.deltaSinceLastIntercept = 0;
-                _runtime.isHumanLastIntercepted = isHumanPaddle;
-
-                if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
-                    var logInfo = "speed: [x: " + _runtime.ballSpeedComponents.x + "], [y: " + _runtime.ballSpeedComponents.y + "], [z: " + _runtime.ballSpeedComponents.z + "]\n";
-                    var ballSpeedVectorTranslated = _fnRotateCoordinatesAroundY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);
-                    logInfo += "translated current speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                    
-                    ballSpeedVectorTranslated.z = -ballSpeedVectorTranslated.z;
-                    logInfo += "translated bounced speed: [x: " + ballSpeedVectorTranslated.x + "], [y: " + ballSpeedVectorTranslated.y + "], [z: " + ballSpeedVectorTranslated.z + "]\n";                      
-                    var ballSpeedComponentsAfterBouncing = _fnRotateCoordinatesAroundY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
-                    logInfo += "bounced speed: [x: " + ballSpeedComponentsAfterBouncing.x + "], [y: " + ballSpeedComponentsAfterBouncing.y + "], [z: " + ballSpeedComponentsAfterBouncing.z + "]\n";                                        
-
-                    console.log(logInfo);
-
-                    _runtime.ballSpeedComponents.x = ballSpeedComponentsAfterBouncing.x;
-                    _runtime.ballSpeedComponents.y = ballSpeedComponentsAfterBouncing.z;
-                } else {
-                    _runtime.ballSpeedComponents.z = -_runtime.ballSpeedComponents.z;               
-                }
-
-                if(isHumanPaddle) {
-                    console.log(_fnGetLogInfo(true));
-                }
-                    
-
-                // // if it's human paddle the bounce logic is more interesting to introduce variability to the game.
-                // // the bounce angle depends on how far from the center the ball struck the paddle.
-                // if(isHumanPaddle) {
-                //     _fnBallBounceOffPaddle(distanceFromPaddleCenter);  
-                // } else {
-                //     _runtime.ballSpeedComponents.speedZ = -_runtime.ballSpeedComponents.speedZ;
-                // }         
-            } else if(Math.abs(_gameObjects.ball.position.z) > _gameOptions.fieldWidth/2) {
-                _runtime.deltaSinceLastScoreChange = 0;
-                _gameObjects.scoreBoard.incrementScore(isHumanPaddle);
-
-                _runtime.isHumanLastScored = !isHumanPaddle;
-
-                if(isHumanPaddle) {
-                    console.log(_fnGetLogInfo(false));
-                }
-
-                return;
-            }
+            _runtime.isHumanLastScored = !isHumanPaddle;
         }
-
 
         _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _runtime.ballSpeedComponents.x * delta);
         _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _runtime.ballSpeedComponents.y * delta);        
@@ -682,12 +636,6 @@ matrixresort.pong = (function($) {
             _gameObjects.ball.position.setY(-limits.yDirection);
             _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
         } 
-
-        // _gameObjects.lineZ.position.setX(_gameObjects.ball.position.x);   
-        // _gameObjects.lineZ.position.setY(_gameObjects.ball.position.y);  
-
-        // _gameObjects.lineX.position.setZ(_gameObjects.ball.position.z); 
-        // _gameObjects.lineX.position.setY(_gameObjects.ball.position.y);  
     },  
 
     _fnGetBallPositionLimits = function() {
@@ -698,66 +646,82 @@ matrixresort.pong = (function($) {
     },      
 
     // the function identifies if there is an interception situation
-    _fnWasIntercepted = function() {
+    _fnWasIntercepted = function(delta) {
+        // the projected ball coordinates. This is the position the ball would move to if no interception is detected
+        var projectedBallCoordinates = new THREE.Vector3(
+            _gameObjects.ball.position.x + _runtime.ballSpeedComponents.x * delta,
+            _gameObjects.ball.position.y + _runtime.ballSpeedComponents.y * delta,
+            _gameObjects.ball.position.z + _runtime.ballSpeedComponents.z * delta
+            );
+
         // checks if the ball is not close enough to the paddle yet. 
         // the earliest a paddle can reach the ball is when the paddle is rotated all the way towards the center of the field
         // there is no need to check for interception situation before then
-        if(Math.abs(_gameObjects.ball.position.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
+        if(Math.abs(projectedBallCoordinates.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
             return _interceptStatuses.NOT_YET_KNOWN;
         }
 
+
         // checks if the ball has already passed the paddle and is beyond paddle reach. 
         // In this case we can be absolutely sure that the ball hasn't been intercepted by paddle
-        if(Math.abs(_gameObjects.ball.position.z) > _gameOptions.fieldLength/2 + _gameOptions.paddleWidth/2) {
+        if(Math.abs(projectedBallCoordinates.z) > _gameOptions.fieldLength/2 + _gameOptions.paddleWidth/2) {
             return _interceptStatuses.MISSED;
         }
 
+        var paddle = projectedBallCoordinates.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+
         // it is easier to detect if the ball crossed the plane of the rotated paddle when we rotate the coordinates in such way that the plane of the paddle has a constant Z*
         // by default set the rotated coordinates to be our regular x-y-z coordinates (in case paddle is not rotated)
-        var rotatedBallCoordinates = _gameObjects.ball.position;
+        var rotatedBallCoordinates = projectedBallCoordinates;
         // in case plane is not rotated its plane will be located at '_gameOptions.fieldLength/2' distance along z-axis
         var rotatedPaddlePlaneZ = _gameOptions.fieldLength/2;
+        var rotatedPaddleLocationX = paddle.position.x;
 
         // if ball is in human's part of the field (only human paddle can rotate) and human paddle is actually rotated
-        if(_gameObjects.ball.position.z > 0 && _gameObjects.humanPaddle.rotation.y != 0) {
-            rotatedBallCoordinates = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);  
-            // rotate the central point on paddle surface, every point on the paddle surface will have the same z* in new, rotated coordinates    
-            var centralPointOnPaddleSurface = new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2);        
-            paddlePlaneRotatedZ = _fnRotateCoordinatesAroundY(centralPointOnPaddleSurface, _gameObjects.humanPaddle.rotation.y).z;        
+        if(projectedBallCoordinates.z > 0 && _gameObjects.humanPaddle.rotation.y != 0) {
+            rotatedBallCoordinates = _fnRotateCoordinatesAroundY(projectedBallCoordinates, _gameObjects.humanPaddle.rotation.y);  
+
+            // find the central point on paddle surface in standard coordinates first
+            var centralPointOnPaddleSurfaceX = _gameObjects.humanPaddle.position.x -_gameOptions.paddleThickness/2 * Math.sin(_gameObjects.humanPaddle.rotation.y);
+            var centralPointOnPaddleSurfaceY = _gameObjects.humanPaddle.position.y;
+            var centralPointOnPaddleSurfaceZ = _gameObjects.humanPaddle.position.z -_gameOptions.paddleThickness/2*Math.cos(_gameObjects.humanPaddle.rotation.y);
+
+            var centralPointOnPaddleSurface = new THREE.Vector3(centralPointOnPaddleSurfaceX, centralPointOnPaddleSurfaceY, centralPointOnPaddleSurfaceZ);  
+
+            // rotate the central point on paddle surface, every point on the paddle surface will have the same z* in new, rotated coordinates 
+            // it might be easier to use rotated coordinates to handle interception as the reminder of the logic simplifies significantly
+            var rotatedCentralPointOnPaddleSurface = _fnRotateCoordinatesAroundY(centralPointOnPaddleSurface, _gameObjects.humanPaddle.rotation.y) 
+            rotatedPaddlePlaneZ = rotatedCentralPointOnPaddleSurface.z;
+            rotatedPaddleLocationX = rotatedCentralPointOnPaddleSurface.x;        
         }
 
         // if the ball is about to cross the paddle line on either side return the paddle which should intercept the ball
-        if(Math.abs(rotatedBallCoordinates.z) >= Math.abs(paddlePlaneRotatedZ - _gameOptions.ballRadius)) {
-            return 
-            (
+        if(Math.abs(rotatedBallCoordinates.z) >= Math.abs(rotatedPaddlePlaneZ - _gameOptions.ballRadius)) {
+            return (
                 (
-                    newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2) &&
-                    newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2) 
+                    rotatedBallCoordinates.x >= (rotatedPaddleLocationX - _gameOptions.paddleWidth/2) &&
+                    rotatedBallCoordinates.x <= (rotatedPaddleLocationX + _gameOptions.paddleWidth/2)  // if the ball center is in paddle x-range
                     || 
-                    newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2 - _gameOptions.ballRadius) &&
-                    _gameObjects.ball.position.x + _gameOptions.fieldWidth/2 < _gameOptions.ballRadius 
+                    rotatedBallCoordinates.x >= (rotatedPaddleLocationX - _gameOptions.paddleWidth/2 - _gameOptions.ballRadius) &&
+                    projectedBallCoordinates.x + _gameOptions.fieldWidth/2 < _gameOptions.ballRadius // if the ball just touches paddle on one side and the left wall on the other side
                     ||
-                    newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2 + _gameOptions.ballRadius) &&
-                    _gameOptions.fieldWidth/2 - _gameObjects.ball.position.x < _gameOptions.ballRadius               
+                    rotatedBallCoordinates.x <= (rotatedPaddleLocationX + _gameOptions.paddleWidth/2 + _gameOptions.ballRadius) &&
+                    _gameOptions.fieldWidth/2 - projectedBallCoordinates.x < _gameOptions.ballRadius  // if the ball just touches paddle on one side and the right wall on the other side             
                 )            
                 && 
                 (
-                    _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2) &&
-                    _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2) 
+                    rotatedBallCoordinates.y >= (paddle.position.y - _gameOptions.paddleHeight/2) &&
+                    rotatedBallCoordinates.y <= (paddle.position.y + _gameOptions.paddleHeight/2) // if the ball center is in paddle y-range
                     ||
-                    _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2 - _gameOptions.ballRadius) &&
-                    _gameObjects.ball.position.y + _gameOptions.fieldHeight/2 < _gameOptions.ballRadius 
+                    rotatedBallCoordinates.y >= (paddle.position.y - _gameOptions.paddleHeight/2 - _gameOptions.ballRadius) &&
+                    projectedBallCoordinates.y + _gameOptions.fieldHeight/2 < _gameOptions.ballRadius // if the top of ball just touches paddle and its bottom touches the bottom plane 
                     ||
-                    _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2 + _gameOptions.ballRadius) &&
-                    _gameOptions.fieldHeight/2 - _gameObjects.ball.position.y < _gameOptions.ballRadius                
-                )
-            ) ? _interceptStatuses.INTERCEPTED : _interceptStatuses.MISSED;
-            // if(_gameObjects.ball.position.z > 0) {
-            //     console.log("Inside: _fnPaddleToInterceptBall" + _fnGetLogInfo(true));
-            // }
-            // return _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+                    rotatedBallCoordinates.y <= (paddle.position.y + _gameOptions.paddleHeight/2 + _gameOptions.ballRadius) &&
+                    _gameOptions.fieldHeight/2 - projectedBallCoordinates.y < _gameOptions.ballRadius  // if the bottom of ball just touches paddle and its top touches the top plane               
+                ) ? _interceptStatuses.INTERCEPTED : _interceptStatuses.MISSED
+            );
         } else {
-            return null;
+            return _interceptStatuses.NOT_YET_KNOWN;
         }
     },   
 
@@ -766,29 +730,57 @@ matrixresort.pong = (function($) {
         var x = originalCoordinates.x * Math.cos(rotationAngleAroundY) - originalCoordinates.z * Math.sin(rotationAngleAroundY);
 
         return new THREE.Vector3(x, originalCoordinates.y, z);
-    },         
+    },      
+
+   _fnBounceOffPaddle = function() {
+        // set time passed since last intercept to 0 in case there's some logic that needs to something for a specific period of time 
+        _runtime.deltaSinceLastIntercept = 0;
+        _runtime.isHumanLastIntercepted = true;
+
+        var isHumanPaddle = _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+
+        // if the paddle was rotated
+        if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
+            // convert _runtime.ballSpeedComponents to rotated coordinates
+            var rotatedBallSpeedVector = _fnRotateCoordinatesAroundY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);    
+            // the bounce off logic is straightforward in rotated coordinates as angles of incedence and reflection are the same (similar to the case when paddle is not rotated)      
+            rotatedBallSpeedVector.z = -rotatedBallSpeedVector.z;    
+            // convert ball speed vector in rotated coordinates back to normal coordinates              
+            var ballSpeedVectorAfterBouncing = _fnRotateCoordinatesAroundY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
+                   
+            // assign calculated components to _runtime.ballSpeedComponents                 
+            _runtime.ballSpeedComponents.x = ballSpeedVectorAfterBouncing.x;
+            _runtime.ballSpeedComponents.z = ballSpeedVectorAfterBouncing.z;
+        } else {
+            // if paddle is not rotated just change sign of z-coordinate
+            _runtime.ballSpeedComponents.z = -_runtime.ballSpeedComponents.z;               
+        }
+    },
     
     _fnPaddleWobble  = function() {
         var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+
         var timeToWobble = 1;
 
+        // the paddle displacement after interception
         var unscaledOffset = 0;
+        // if wobbling time is over return paddle to its normal position and reset _runtime.deltaSinceLastIntercept to prevent any additional wobbling
         if(_runtime.deltaSinceLastIntercept > timeToWobble) {
             unscaledOffset = 0;
             _runtime.deltaSinceLastIntercept = -1;
         } else {
+            // calculate the dispalcement otherwise
             unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
         }
 
         var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
+        // scale the 'unscaleOffset'. Here we allow the paddle to wobble up to 32 points in z-direction
         var newZ = ((_gameOptions.fieldLength + _gameOptions.paddleThickness)/2 + 32 * unscaledOffset) * wobbleDirection;
 
         paddle.position.setZ(newZ);
     },
 
     _fnGetLogInfo = function(wasIntercepted) {
-        var logInfo = wasIntercepted ? "Intercepted!\n" : "Missed\n";
-        logInfo+= "ball position: [x: " + _gameObjects.ball.position.x + "]" + ", [y: " + _gameObjects.ball.position.y + "]" + ", [z: " + _gameObjects.ball.position.z + "]\n";
         var transformedBallPosition = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
         logInfo += "ball transformed position: [x: " + transformedBallPosition.x + "]" + ", [y: " + transformedBallPosition.y + "]" + ", [z: " + transformedBallPosition.z + "]\n";
         logInfo += "paddle center position: [x: " + _gameObjects.humanPaddle.position.x + "]" + ", [y: " + _gameObjects.humanPaddle.position.y + "]" + ", [z: " + (_gameObjects.humanPaddle.position.z+_gameOptions.paddleThickness) + "]\n";                  
@@ -797,33 +789,6 @@ matrixresort.pong = (function($) {
         logInfo += "paddle rotation angle: " + _gameObjects.humanPaddle.rotation.y;
 
         return logInfo;
-    },
-
-    _fnBallBounceOffPaddle = function(distanceFromPaddleCenter) {
-        var deltaAngle = Math.PI/6 * distanceFromPaddleCenter / (_gameOptions.paddleWidth / 2) - Math.PI/12;
-
-        var minAngle = Math.Pi/12;
-        var maxAngle = 5*Math.PI/12;
-
-        var newAngle = Math.abs(Math.atan(_runtime.ballSpeedComponents.x / _runtime.ballSpeedComponents.z)) + deltaAngle;
-
-        if(newAngle < minAngle) {
-            newAngle =  minAngle;
-        }  
-
-        if(newAngle > maxAngle) {
-            newAngle = maxAngle;
-        } 
-
-        var newAngleTan = Math.tan(newAngle);
-
-        directionSignZ = _runtime.ballSpeedComponents.z > 0 ? 1 : -1;
-        directionSignX = _runtime.ballSpeedComponents.x > 0 ? 1 : -1;
-
-        _fnSetBallSpeedComponents(newAngleTan);
-
-        _runtime.ballSpeedComponents.z = Math.abs(_runtime.ballSpeedComponents.z)*(-directionSignZ);
-        _runtime.ballSpeedComponents.x = Math.abs(_runtime.ballSpeedComponents.x)*directionSignX;
     },
 
     _fnBallJump = function() {
@@ -871,53 +836,6 @@ matrixresort.pong = (function($) {
     _fnIsHumanPaddle = function(paddle) {
         return paddle.position.z > 0;
     },
-
-    _fnIsBallIntercepted = function(paddle) {
-        var newBallCoordinates = _gameObjects.ball.position;
-        var newRotatedXOfPaddleCeneter = paddle.position.x;
-        var paddlePlaneRotatedZ = _gameOptions.fieldLength/2;
-
-        if(Math.abs(newBallCoordinates.z) > (_gameOptions.fieldLength + _gameOptions.paddleWidth)/2) {
-            return false;
-        }
-
-        if(_fnIsHumanPaddle(paddle)) {
-            if(_gameObjects.humanPaddle.rotation.y != 0) {
-                newBallCoordinates = _fnRotateCoordinatesAroundY(_gameObjects.ball.position, _gameObjects.humanPaddle.rotation.y);
-                paddlePlaneRotatedZ = _fnRotateCoordinatesAroundY(new THREE.Vector3(_gameObjects.humanPaddle.position.x, _gameObjects.humanPaddle.position.y, _gameOptions.fieldLength/2), _gameObjects.humanPaddle.rotation.y).z;
-                newRotatedXOfPaddleCeneter = _fnRotateCoordinatesAroundY(_gameObjects.humanPaddle.position, _gameObjects.humanPaddle.rotation.y).x;
-            }
-        }        
-
-        return (
-            (
-                newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2) &&
-                newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2) 
-                || 
-                newBallCoordinates.x >= (newRotatedXOfPaddleCeneter - _gameOptions.paddleWidth/2 - _gameOptions.ballRadius) &&
-                _gameObjects.ball.position.x + _gameOptions.fieldWidth/2 < _gameOptions.ballRadius 
-                ||
-                newBallCoordinates.x <= (newRotatedXOfPaddleCeneter + _gameOptions.paddleWidth/2 + _gameOptions.ballRadius) &&
-                _gameOptions.fieldWidth/2 - _gameObjects.ball.position.x < _gameOptions.ballRadius               
-            )            
-            && 
-            (
-                _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2) &&
-                _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2) 
-                ||
-                _gameObjects.ball.position.y >= (paddle.position.y - _gameOptions.paddleHeight/2 - _gameOptions.ballRadius) &&
-                _gameObjects.ball.position.y + _gameOptions.fieldHeight/2 < _gameOptions.ballRadius 
-                ||
-                _gameObjects.ball.position.y <= (paddle.position.y + _gameOptions.paddleHeight/2 + _gameOptions.ballRadius) &&
-                _gameOptions.fieldHeight/2 - _gameObjects.ball.position.y < _gameOptions.ballRadius                
-            )
-        );
-    },
-
-    // _fnGetRotatedZCoordinateOfHumanPaddleY = function() {
-    //     var paddle = _gameObjects.humanPaddle;
-    //     return 1/2*(Math.cos(paddle.rotation.y)*(_gameOptions.paddleThickness+_gameOptions.fieldLength)-_gameOptions.paddleThickness);
-    // },
 
     _fnSetBallSpeedComponents = function(directionTangentXZ, directionTangentXY) {
         if(!_runtime.ballSpeedComponents) {
@@ -1021,4 +939,5 @@ matrixresort.pong = (function($) {
 
 })(jQuery);
 
+// init the game with all the parameters set to their default values
 matrixresort.pong.init('container', {});
