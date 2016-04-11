@@ -472,7 +472,7 @@ matrixresort.pong = (function($) {
 
         if(_runtime.deltaSinceLastIntercept >= 0) {     // do something 'interesting' for sometime after paddle has itercepted the ball
             _runtime.deltaSinceLastIntercept += delta;              
-            _fnPaddleWobble();            
+            _fnPaddleWobble(deltaSinceLastIntercept);            
         }  
 
         _threejs.renderer.render(_threejs.scene, _threejs.camera);        
@@ -761,13 +761,18 @@ matrixresort.pong = (function($) {
         var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
 
         var timeToWobble = 1;
+        var defaultPaddlePositionZ = _gameOptions.fieldLength/2 + _gameOptions.paddleThickness/2;
+
+        // do not do anything if wobbling time is over and paddle is already in its default position
+        if(_runtime.deltaSinceLastIntercept > timeToWobble && paddle.position.z === defaultPaddlePositionZ) {
+            return;
+        }
 
         // the paddle displacement after interception
         var unscaledOffset = 0;
         // if wobbling time is over return paddle to its normal position and reset _runtime.deltaSinceLastIntercept to prevent any additional wobbling
         if(_runtime.deltaSinceLastIntercept > timeToWobble) {
             unscaledOffset = 0;
-            _runtime.deltaSinceLastIntercept = -1;
         } else {
             // calculate the dispalcement otherwise
             unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
@@ -775,7 +780,7 @@ matrixresort.pong = (function($) {
 
         var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
         // scale the 'unscaleOffset'. Here we allow the paddle to wobble up to 32 points in z-direction
-        var newZ = ((_gameOptions.fieldLength + _gameOptions.paddleThickness)/2 + 32 * unscaledOffset) * wobbleDirection;
+        var newZ = defaultPaddlePositionZ + 32 * unscaledOffset * wobbleDirection;
 
         paddle.position.setZ(newZ);
     },
