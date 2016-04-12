@@ -481,7 +481,7 @@ matrixresort.pong = (function($) {
         else // in case of recent score change do something special
         {
             _runtime.deltaSinceLastScoreChange += delta;               
-            //_fnBallJump();         
+            _fnBallJump();         
         }
 
         _threejs.renderer.render(_threejs.scene, _threejs.camera);        
