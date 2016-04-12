@@ -754,7 +754,7 @@ matrixresort.pong = (function($) {
             // the bounce off logic is straightforward in rotated coordinates as angles of incedence and reflection are the same (similar to the case when paddle is not rotated)      
             rotatedBallSpeedVector.z = -rotatedBallSpeedVector.z;    
             // convert ball speed vector in rotated coordinates back to normal coordinates              
-            var ballSpeedVectorAfterBouncing = _fnRotateCoordinatesAroundY(ballSpeedVectorTranslated, -_gameObjects.humanPaddle.rotation.y);
+            var ballSpeedVectorAfterBouncing = _fnRotateCoordinatesAroundY(rotatedBallSpeedVector, -_gameObjects.humanPaddle.rotation.y);
                    
             // assign calculated components to _runtime.ballSpeedComponents                 
             _runtime.ballSpeedComponents.x = ballSpeedVectorAfterBouncing.x;
@@ -808,7 +808,7 @@ matrixresort.pong = (function($) {
             _gameObjects.ball.position.setY(0);        
             _gameObjects.ball.position.setZ(0); 
 
-            var limits = _fnGetMaxBallDistanceFromCenter();
+            var limits = _fnGetBallPositionLimits();
 
             var unscaledHeight = Math.abs(Math.sin(2 * _runtime.deltaSinceLastScoreChange * 2 * Math.PI /_gameOptions.pauseAfterScoreChange));
             var hue = unscaledHeight;
