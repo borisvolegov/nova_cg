@@ -65,13 +65,13 @@ matrixresort.pong = (function($) {
         "ballSpeedComponents": null,    
         "deltaSinceLastScoreChange": 0,
         "isHumanLastScored": null,    
-        "deltaSinceLastIntercept": -1,
+        "deltaSinceLastIntercept": Infinity,
         "isHumanLastIntercepted": null
     },  // object to contain the parameters that change at runtime 
     _runtime = null, 
     _interceptStatuses = {
         "MISSED": -1,
-        "NOT_YET_KNOWN": 0,
+        "NOT_APPLICABLE": 0,
         "INTERCEPTED": 1
     }, // enumeration to reresent the result of interception
 
@@ -248,11 +248,11 @@ matrixresort.pong = (function($) {
             _fnCreateScoreBoard();
         };
 
-        _gameObjects.scoreBoard.incrementScore = function(isHumanPaddle)  {
-            if(isHumanPaddle) {
-                _gameObjects.scoreBoard.computerScore += 1;
-            } else {
+        _gameObjects.scoreBoard.incrementScore = function(isHumanScored)  {
+            if(isHumanScored) {
                 _gameObjects.scoreBoard.humanScore += 1;
+            } else {
+                _gameObjects.scoreBoard.computerScore += 1;
             }
 
             _gameObjects.scoreBoard.updateScore();
@@ -457,7 +457,21 @@ matrixresort.pong = (function($) {
         { 
             _fnHumanPaddleMove();
             _fnComputerPaddleMove(delta);            
-            _fnBallMove(delta);       
+            var interceptionStatus = _fnBallMove(delta);    
+
+            if(interceptionStatus === _interceptStatuses.INTERCEPTED) {
+                // set time passed since last intercept to 0 in case there's some logic that needs to something for a specific period of time 
+                _runtime.deltaSinceLastIntercept = 0;                               
+            } else {
+                _fnInterceptionBehavior(delta); // do something 'interesting' for some time after a paddle has itercepted the ball 
+                _runtime.deltaSinceLastIntercept += delta;                 
+            }
+
+            if(interceptionStatus === _interceptStatuses.MISSED) {
+                _runtime.deltaSinceLastScoreChange = 0;  
+                _runtime.isHumanLastScored = _gameObjects.ball.position.z < 0;                    
+                _gameObjects.scoreBoard.incrementScore(_runtime.isHumanLastScored);       
+            }
         } 
         else if (_runtime.deltaSinceLastScoreChange > _gameOptions.pauseAfterScoreChange) // if enough time passed since the last score chage transition to normal mode
         {
@@ -469,11 +483,6 @@ matrixresort.pong = (function($) {
             _runtime.deltaSinceLastScoreChange += delta;               
             //_fnBallJump();         
         }
-
-        if(_runtime.deltaSinceLastIntercept >= 0) {     // do something 'interesting' for sometime after paddle has itercepted the ball
-            _runtime.deltaSinceLastIntercept += delta;              
-            _fnPaddleWobble(deltaSinceLastIntercept);            
-        }  
 
         _threejs.renderer.render(_threejs.scene, _threejs.camera);        
     },        
@@ -603,39 +612,41 @@ matrixresort.pong = (function($) {
         var limits = _fnGetBallPositionLimits();
 
         var interceptionStatus = _fnWasIntercepted(delta);
-        if(interceptionStatus === _interceptStatuses.INTERCEPTED) {
-            _fnBounceOffPaddle();
-        } else if(interceptionStatus === _interceptStatuses.MISSED) {
-            _runtime.deltaSinceLastScoreChange = 0;
-            _gameObjects.scoreBoard.incrementScore(isHumanPaddle);
 
-            _runtime.isHumanLastScored = !isHumanPaddle;
+        if(interceptionStatus !== _interceptStatuses.MISSED) {
+
+            if(interceptionStatus === _interceptStatuses.INTERCEPTED) {
+                _fnBounceOffPaddle();
+            }
+
+            _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _runtime.ballSpeedComponents.x * delta);
+            _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _runtime.ballSpeedComponents.y * delta);        
+            _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _runtime.ballSpeedComponents.z * delta);  
+
+            // ball bounces back off the walls or top/bottom planes
+            if(_gameObjects.ball.position.x >= limits.xDirection) {
+                _gameObjects.ball.position.setX(limits.xDirection);
+                _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
+            } 
+
+            if(_gameObjects.ball.position.x <= -limits.xDirection) {
+                _gameObjects.ball.position.setX(-limits.xDirection);
+                _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
+            } 
+
+            if(_gameObjects.ball.position.y >= limits.yDirection) {
+                _gameObjects.ball.position.setY(limits.yDirection);
+                _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
+            }  
+
+            if(_gameObjects.ball.position.y <= -limits.yDirection) {
+                _gameObjects.ball.position.setY(-limits.yDirection);
+                _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
+            }   
+
         }
 
-        _gameObjects.ball.position.setX(_gameObjects.ball.position.x + _runtime.ballSpeedComponents.x * delta);
-        _gameObjects.ball.position.setY(_gameObjects.ball.position.y + _runtime.ballSpeedComponents.y * delta);        
-        _gameObjects.ball.position.setZ(_gameObjects.ball.position.z + _runtime.ballSpeedComponents.z * delta);  
-
-        // ball bounces back off the walls or top/bottom planes
-        if(_gameObjects.ball.position.x >= limits.xDirection) {
-            _gameObjects.ball.position.setX(limits.xDirection);
-            _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
-        } 
-
-        if(_gameObjects.ball.position.x <= -limits.xDirection) {
-            _gameObjects.ball.position.setX(-limits.xDirection);
-            _runtime.ballSpeedComponents.x = -_runtime.ballSpeedComponents.x;   
-        } 
-
-        if(_gameObjects.ball.position.y >= limits.yDirection) {
-            _gameObjects.ball.position.setY(limits.yDirection);
-            _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
-        }  
-
-        if(_gameObjects.ball.position.y <= -limits.yDirection) {
-            _gameObjects.ball.position.setY(-limits.yDirection);
-            _runtime.ballSpeedComponents.y = -_runtime.ballSpeedComponents.y;   
-        } 
+        return interceptionStatus;
     },  
 
     _fnGetBallPositionLimits = function() {
@@ -658,7 +669,7 @@ matrixresort.pong = (function($) {
         // the earliest a paddle can reach the ball is when the paddle is rotated all the way towards the center of the field
         // there is no need to check for interception situation before then
         if(Math.abs(projectedBallCoordinates.z) < _gameOptions.fieldLength/2 - _gameOptions.paddleWidth/2){
-            return _interceptStatuses.NOT_YET_KNOWN;
+            return _interceptStatuses.NOT_APPLICABLE;
         }
 
 
@@ -733,14 +744,11 @@ matrixresort.pong = (function($) {
     },      
 
    _fnBounceOffPaddle = function() {
-        // set time passed since last intercept to 0 in case there's some logic that needs to something for a specific period of time 
-        _runtime.deltaSinceLastIntercept = 0;
-        _runtime.isHumanLastIntercepted = true;
-
-        var isHumanPaddle = _gameObjects.ball.position.z > 0 ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+        _runtime.isHumanLastIntercepted = _gameObjects.ball.position.z > 0;
+        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle; 
 
         // if the paddle was rotated
-        if(isHumanPaddle && _gameObjects.humanPaddle.rotation.y != 0) {
+        if(_runtime.isHumanLastIntercepted && _gameObjects.humanPaddle.rotation.y != 0) {
             // convert _runtime.ballSpeedComponents to rotated coordinates
             var rotatedBallSpeedVector = _fnRotateCoordinatesAroundY(_runtime.ballSpeedComponents, _gameObjects.humanPaddle.rotation.y);    
             // the bounce off logic is straightforward in rotated coordinates as angles of incedence and reflection are the same (similar to the case when paddle is not rotated)      
@@ -757,30 +765,26 @@ matrixresort.pong = (function($) {
         }
     },
     
-    _fnPaddleWobble  = function() {
-        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
-
+    _fnInterceptionBehavior  = function(delta) {
         var timeToWobble = 1;
-        var defaultPaddlePositionZ = _gameOptions.fieldLength/2 + _gameOptions.paddleThickness/2;
 
-        // do not do anything if wobbling time is over and paddle is already in its default position
-        if(_runtime.deltaSinceLastIntercept > timeToWobble && paddle.position.z === defaultPaddlePositionZ) {
-            return;
+        if(_runtime.deltaSinceLastIntercept > timeToWobble) {  // if intercepted long time ago do not bother           
+            return;           
         }
 
-        // the paddle displacement after interception
-        var unscaledOffset = 0;
-        // if wobbling time is over return paddle to its normal position and reset _runtime.deltaSinceLastIntercept to prevent any additional wobbling
-        if(_runtime.deltaSinceLastIntercept > timeToWobble) {
-            unscaledOffset = 0;
-        } else {
-            // calculate the dispalcement otherwise
+        var defaultPaddlePositionZ = _gameOptions.fieldLength/2 + _gameOptions.paddleThickness/2;
+        var paddle = _runtime.isHumanLastIntercepted ? _gameObjects.humanPaddle : _gameObjects.computerPaddle;
+
+        if(_runtime.deltaSinceLastIntercept + delta > timeToWobble) { // if just passed threshold to handle interception return paddle to its default position
+            var unscaledOffset = 0;
+        } else { // calculate the dispalcement otherwise
             unscaledOffset = Math.sin(_runtime.deltaSinceLastIntercept *  Math.PI / timeToWobble);
         }
 
         var wobbleDirection = _runtime.isHumanLastIntercepted ? 1 : -1;
+
         // scale the 'unscaleOffset'. Here we allow the paddle to wobble up to 32 points in z-direction
-        var newZ = defaultPaddlePositionZ + 32 * unscaledOffset * wobbleDirection;
+        var newZ = (defaultPaddlePositionZ + 32 * unscaledOffset) * wobbleDirection;
 
         paddle.position.setZ(newZ);
     },
